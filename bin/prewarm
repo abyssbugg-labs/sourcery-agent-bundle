@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-# Prewarm the plugin environment (venv + dependencies) without starting a
-# server. Used by the optional SessionStart hook example in examples/hooks/.
-# All output goes to stderr so hook stdout stays clean.
-set -euo pipefail
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_bootstrap"
-"$VENV_PY" -c "import sourcery_agent.cli, sourcery_agent.server" >/dev/null
-echo "sourcery-agent: environment ready" >&2

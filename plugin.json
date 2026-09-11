@@ -1,8 +1,0 @@
-{
-  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "sourcery-agent",
-  "version": "0.2.0",
-  "description": "Sourcery security findings for AI coding agents: triage and minimal-change remediation via the public Sourcery API (12 MCP tools + skills).",
-  "author": { "name": "datamatics" },
-  "keywords": ["sourcery", "security", "findings", "triage", "mcp"]
-}
