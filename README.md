@@ -54,6 +54,7 @@ sourcery-agent-bundle/
     sourcery-triager.md            # read-only triage sub-agent (Claude format)
   .claude-plugin/plugin.json       # Claude Code manifest + userConfig API key
   .mcp.json                        # Claude Code MCP wiring
+  hooks/hooks.json                 # SessionStart prewarm (Claude format; active)
   .agents/plugins/marketplace.json # Codex/ChatGPT local marketplace entry
   scripts/
     install-rovodev.sh             # Rovo Dev CLI wiring (mcp.json + skills)

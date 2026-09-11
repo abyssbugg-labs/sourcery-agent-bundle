@@ -139,3 +139,13 @@ def test_subagent_has_valid_frontmatter():
 def test_hooks_example_is_valid_json():
     data = _load(REPO / "examples" / "hooks" / "claude-hooks.json")
     assert "SessionStart" in data["hooks"]
+
+
+def test_enabled_hooks_wire_to_prewarm():
+    data = _load(REPO / "hooks" / "hooks.json")
+    commands = [
+        hook["command"]
+        for entry in data["hooks"]["SessionStart"]
+        for hook in entry["hooks"]
+    ]
+    assert any("bin/prewarm" in command for command in commands)

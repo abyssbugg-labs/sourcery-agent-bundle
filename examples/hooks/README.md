@@ -1,10 +1,8 @@
-# Optional hooks (example only — not enabled)
+# Hooks example (an enabled copy lives at `hooks/hooks.json`)
 
-Nothing in this folder is active. To enable the example for Claude Code:
-
-```bash
-cp examples/hooks/claude-hooks.json hooks/hooks.json
-```
+This folder keeps the source example and rationale. An enabled copy ships at
+`hooks/hooks.json`, so Claude Code runs the `SessionStart` prewarm from the repo
+as-is. To disable: delete `hooks/hooks.json` (this example stays here).
 
 ## What the example does
 

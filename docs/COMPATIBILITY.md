@@ -168,7 +168,7 @@ The launcher is host-agnostic: it derives the plugin root from its own path and 
 
 - **CLI** — `sourcery-agent snapshot|list|get|counts|fix-prompt` (add `--json` for scripting). Works standalone (console script after `pip install`) or via `bin/sourcery-agent` in any plugin host; on Claude-style hosts `bin/` is on PATH while the plugin is enabled. Key resolution: `SOURCERY_API_KEY`, else the key file below.
 - **Sub-agent** — `agents/sourcery-triager.md`: a read-only triage persona (Write/Edit disallowed) for Claude Code and other Claude-format readers; produces the prioritized report and fix plan without touching code.
-- **Hooks** — shipped as an **example only** (`examples/hooks/claude-hooks.json`), not enabled. To enable the SessionStart prewarm for Claude Code: `cp examples/hooks/claude-hooks.json hooks/hooks.json`. Rationale: findings refresh on Sourcery's scan cadence, not per local edit, so a "check findings after each edit" hook would be noise; prewarm (one-time dependency install) is the only hook with real value here. VS Code reads hooks for Agent Plugins packages from `com.github.copilot/hooks/hooks.json` if you later add them there.
+- **Hooks** — **enabled** for Claude Code via `hooks/hooks.json`: a `SessionStart` prewarm (`bin/prewarm`) installs the venv/dependencies once so the first Sourcery tool call in a session is fast. Source example and rationale kept at `examples/hooks/claude-hooks.json`: findings refresh on Sourcery's scan cadence, not per local edit, so a "check findings after each edit" hook would be noise. Other hosts: VS Code Agent Plugins packages read `com.github.copilot/hooks/hooks.json`; OpenClaw detects Claude hooks but does not execute them.
 
 ## Troubleshooting
 
