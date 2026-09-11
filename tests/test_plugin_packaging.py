@@ -184,3 +184,40 @@ def test_rovodev_installer_refreshes_stale_skill_symlink(tmp_path):
     expected = REPO / "skills" / "sourcery-triage"
     assert stale.is_symlink()
     assert stale.resolve() == expected.resolve()
+
+    manifest = skills_dir / ".sourcery-agent-managed"
+    assert manifest.is_file()
+    assert "sourcery-triage" in manifest.read_text()
+
+
+def test_rovodev_installer_preserves_unmanaged_symlinks(tmp_path):
+    import os
+    import subprocess
+
+    home = tmp_path / "home"
+    skills_dir = home / ".rovodev" / "skills"
+    skills_dir.mkdir(parents=True)
+    custom = tmp_path / "my-custom-skill"
+    custom.mkdir()
+    link = skills_dir / "sourcery-triage"
+    link.symlink_to(custom)
+
+    result = subprocess.run(
+        ["bash", str(REPO / "scripts" / "install-rovodev.sh")],
+        env={**os.environ, "HOME": str(home)},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert link.resolve() == custom.resolve()
+
+
+def test_version_is_consistent_across_manifests():
+    import tomllib
+
+    versions = {
+        tomllib.loads((REPO / "pyproject.toml").read_text())["project"]["version"],
+        _load(REPO / "plugin.json")["version"],
+        _load(REPO / ".claude-plugin" / "plugin.json")["version"],
+    }
+    assert len(versions) == 1, f"mismatched versions: {versions}"

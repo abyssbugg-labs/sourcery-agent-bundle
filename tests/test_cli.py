@@ -48,10 +48,20 @@ def test_usable_key_rejects_placeholders():
     assert cli.usable_key(None) is False
 
 
-def test_main_reports_missing_key(monkeypatch, capsys):
+def test_main_reports_missing_key(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("SOURCERY_API_KEY", raising=False)
     monkeypatch.delenv("PLUGIN_DATA", raising=False)
     monkeypatch.delenv("CLAUDE_PLUGIN_DATA", raising=False)
-    monkeypatch.setenv("SOURCERY_API_KEY_FILE", "/tmp/definitely-missing-sourcery-key")
+    monkeypatch.setenv("SOURCERY_API_KEY_FILE", str(tmp_path / "definitely-missing-key"))
     assert cli.main(["snapshot"]) == 1
     assert "SOURCERY_API_KEY" in capsys.readouterr().err
+
+
+def test_main_reports_key_file_read_errors(tmp_path, monkeypatch, capsys):
+    key_file = tmp_path / "unreadable-key"
+    key_file.write_text("not-used")
+    key_file.chmod(0)
+    monkeypatch.delenv("SOURCERY_API_KEY", raising=False)
+    monkeypatch.setenv("SOURCERY_API_KEY_FILE", str(key_file))
+    assert cli.main(["snapshot"]) == 1
+    assert "sourcery-agent:" in capsys.readouterr().err

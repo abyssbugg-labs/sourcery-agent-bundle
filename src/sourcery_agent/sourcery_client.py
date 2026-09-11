@@ -84,7 +84,10 @@ class SourceryClient:
         self.api_key = api_key or os.getenv("SOURCERY_API_KEY")
         if not self.api_key:
             raise SourceryError("SOURCERY_API_KEY is not configured")
-        self.base_url = (base_url or os.getenv("SOURCERY_API_BASE") or API_BASE).rstrip("/")
+        resolved_base = (base_url or os.getenv("SOURCERY_API_BASE") or API_BASE).rstrip("/")
+        if not resolved_base.startswith("https://"):
+            raise SourceryError(f"SOURCERY_API_BASE must be an https:// URL; got {resolved_base!r}")
+        self.base_url = resolved_base
 
     def request(
         self,

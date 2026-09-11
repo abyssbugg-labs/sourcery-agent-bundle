@@ -74,8 +74,8 @@ SOURCERY_API_KEY=... bin/run-http        # Streamable HTTP, default 127.0.0.1:87
 ```
 
 1. Expose the endpoint over HTTPS (tunnel or your own host).
-2. ChatGPT → **Settings → Security and login** → enable **Developer mode**.
-3. **chatgpt.com/plugins** → **+** → create a developer-mode app with your MCP URL (streaming HTTP is supported).
+2. Open **Workspace settings** in ChatGPT and enable **Developer mode** (requires an eligible Business, Enterprise, or Edu workspace).
+3. **Settings → Apps → Create** to register the app with your MCP URL (streaming HTTP is supported).
 4. Tools appear under **Developer mode** in the composer; write actions require confirmation.
 
 Security: `bin/run-http` binds loopback by default and **refuses non-loopback hosts** unless both `SOURCERY_MCP_ALLOW_REMOTE=1` and a non-empty `SOURCERY_MCP_AUTH_TOKEN` are set; the transport itself does not terminate request auth, so a fronting proxy must require that bearer token. Public-directory submission additionally requires a public HTTPS endpoint and OAuth when the server accesses private data. `examples/mcp.http.json` is a template for the remote variant.
