@@ -26,7 +26,7 @@ cfg_path = home / ".rovodev" / "mcp.json"
 cfg = {}
 if cfg_path.exists():
     cfg = json.loads(cfg_path.read_text())
-    stamp = time.strftime("%Y%m%d-%H%M%S")
+    stamp = os.environ.get("SOURCERY_BACKUP_STAMP") or time.strftime("%Y%m%d-%H%M%S")
     backup = cfg_path.with_name(f"mcp.json.bak-{stamp}")
     counter = 1
     while backup.exists():

@@ -10,24 +10,54 @@ Git provider connector for those.
 from __future__ import annotations
 
 import json
+import os
+import secrets
 from typing import Any
 
+from mcp.server.auth.provider import AccessToken
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
 
 from . import constants
 from .prompts import build_fix_prompt
 from .sourcery_client import SourceryClient, validate_bulk_update
 
-mcp = MCPServer(
-    "Sourcery Agent Bundle",
-    instructions=(
-        "Sourcery security-findings triage and remediation. Start with "
-        "sourcery_security_snapshot for an overview, drill into "
-        "sourcery_list_findings / sourcery_get_finding, and use "
-        "sourcery_build_fix_prompt to hand a finding to a coding agent. "
-        "All tools are limited to Sourcery's public security API."
-    ),
+_INSTRUCTIONS = (
+    "Sourcery security-findings triage and remediation. Start with "
+    "sourcery_security_snapshot for an overview, drill into "
+    "sourcery_list_findings / sourcery_get_finding, and use "
+    "sourcery_build_fix_prompt to hand a finding to a coding agent. "
+    "All tools are limited to Sourcery's public security API."
 )
+
+
+class StaticTokenVerifier:
+    """Verify the single pre-shared bearer token from SOURCERY_MCP_AUTH_TOKEN."""
+
+    def __init__(self, token: str) -> None:
+        """Store the expected token."""
+        self._token = token
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        """Return access info for a matching token, else None."""
+        if secrets.compare_digest(token, self._token):
+            return AccessToken(token=token, client_id="sourcery-remote", scopes=["sourcery"])
+        return None
+
+
+def build_server(auth_token: str | None = None) -> MCPServer:
+    """Create the MCP server; a configured token enables SDK bearer verification."""
+    kwargs: dict[str, Any] = {}
+    token = (auth_token or "").strip()
+    if token:
+        resource_url = os.environ.get("SOURCERY_MCP_RESOURCE_URL") or "http://127.0.0.1:8765"
+        issuer_url = os.environ.get("SOURCERY_MCP_ISSUER_URL") or resource_url
+        kwargs["token_verifier"] = StaticTokenVerifier(token)
+        kwargs["auth"] = AuthSettings(issuer_url=issuer_url, resource_server_url=resource_url)
+    return MCPServer("Sourcery Agent Bundle", instructions=_INSTRUCTIONS, **kwargs)
+
+
+mcp = build_server(os.environ.get("SOURCERY_MCP_AUTH_TOKEN"))
 
 
 def _client() -> SourceryClient:
