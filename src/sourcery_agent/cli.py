@@ -32,12 +32,17 @@ def sanitize_for_terminal(text: str) -> str:
     return _ESCAPE_SEQUENCES.sub("", text)
 
 
-def _for_display(finding: dict[str, Any]) -> dict[str, Any]:
-    """Copy a finding with untrusted string fields sanitized for terminal display."""
-    return {
-        key: (sanitize_for_terminal(value) if isinstance(value, str) else value)
-        for key, value in finding.items()
-    }
+def _for_display(value: Any) -> Any:
+    """Recursively strip terminal controls from all human-readable values."""
+    if isinstance(value, str):
+        return sanitize_for_terminal(value)
+    if isinstance(value, dict):
+        return {key: _for_display(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_for_display(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_for_display(item) for item in value)
+    return value
 
 
 def usable_key(value: str | None) -> bool:

@@ -80,10 +80,16 @@ if needs_install; then
     if [ -z "$owner" ]; then
       # No recorded owner: reclaim only a clearly abandoned lock (10+ minutes old).
       if [ -n "$(find "$LOCK_DIR" -maxdepth 0 -mmin +10 -print -quit 2>/dev/null)" ]; then
-        rm -rf "$LOCK_DIR" 2>/dev/null || true
+        STALE_LOCK_DIR="${LOCK_DIR}.stale.$$.$RANDOM"
+        if mv "$LOCK_DIR" "$STALE_LOCK_DIR" 2>/dev/null; then
+          rm -rf "$STALE_LOCK_DIR" 2>/dev/null || true
+        fi
       fi
     elif ! kill -0 "$owner" 2>/dev/null; then
-      rm -rf "$LOCK_DIR" 2>/dev/null || true
+      STALE_LOCK_DIR="${LOCK_DIR}.stale.$$.$RANDOM"
+      if mv "$LOCK_DIR" "$STALE_LOCK_DIR" 2>/dev/null; then
+        rm -rf "$STALE_LOCK_DIR" 2>/dev/null || true
+      fi
     fi
     sleep 0.2 2>/dev/null || sleep 1
   done

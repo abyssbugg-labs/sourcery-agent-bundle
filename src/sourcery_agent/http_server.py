@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import ipaddress
 import os
+from urllib.parse import urlparse
 
-from .server import mcp
+from .server import build_server
 
 
 def is_loopback_host(host: str) -> bool:
@@ -50,13 +51,68 @@ def check_bind_allowed(host: str) -> None:
         )
 
 
+def resolve_resource_url(host: str, port: int, path: str, configured: str | None) -> str:
+    """Return the actual MCP resource URL or reject unsafe remote metadata."""
+    if not 1 <= port <= 65535:
+        raise SystemExit(f"SOURCERY_MCP_PORT must be between 1 and 65535; got {port}")
+    normalized_path = "/" + path.strip().strip("/")
+    if configured:
+        parsed = urlparse(configured)
+        allowed_schemes = {"http", "https"} if is_loopback_host(host) else {"https"}
+        try:
+            parsed.port
+        except ValueError as exc:
+            raise SystemExit("SOURCERY_MCP_RESOURCE_URL contains an invalid port") from exc
+        if (
+            parsed.scheme not in allowed_schemes
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
+            expected = "HTTP(S)" if is_loopback_host(host) else "HTTPS"
+            raise SystemExit(
+                f"SOURCERY_MCP_RESOURCE_URL must be an absolute {expected} URL "
+                "without user information"
+            )
+        if parsed.query or parsed.fragment:
+            raise SystemExit("SOURCERY_MCP_RESOURCE_URL must not contain a query or fragment")
+        if parsed.path.rstrip("/") != normalized_path.rstrip("/"):
+            raise SystemExit(
+                f"SOURCERY_MCP_RESOURCE_URL path must be {normalized_path!r}; got {parsed.path!r}"
+            )
+        return configured
+    if not is_loopback_host(host):
+        raise SystemExit(
+            f"Remote bind {host}:{port} requires explicit SOURCERY_MCP_RESOURCE_URL "
+            f"(e.g., https://mcp.example.com{normalized_path})"
+        )
+    url_host = f"[{host}]" if ":" in host else host
+    return f"http://{url_host}:{port}{normalized_path}"
+
+
 def main() -> None:
-    """Run the Streamable HTTP server (loopback-only unless remote mode is configured)."""
+    """Run the Streamable HTTP server with endpoint-matched auth metadata."""
     host = os.getenv("SOURCERY_MCP_HOST", "127.0.0.1")
-    port = int(os.getenv("SOURCERY_MCP_PORT", "8765"))
-    path = os.getenv("SOURCERY_MCP_PATH", "/mcp")
+    raw_port = os.getenv("SOURCERY_MCP_PORT", "8765")
+    try:
+        port = int(raw_port)
+    except ValueError as exc:
+        raise SystemExit(f"SOURCERY_MCP_PORT must be an integer; got {raw_port!r}") from exc
+    path = "/" + os.getenv("SOURCERY_MCP_PATH", "/mcp").strip().strip("/")
     check_bind_allowed(host)
-    mcp.run(transport="streamable-http", host=host, port=port, streamable_http_path=path)
+    auth_token = os.getenv("SOURCERY_MCP_AUTH_TOKEN")
+    resource_url = resolve_resource_url(
+        host,
+        port,
+        path,
+        os.getenv("SOURCERY_MCP_RESOURCE_URL"),
+    )
+    build_server(auth_token=auth_token, resource_url=resource_url).run(
+        transport="streamable-http",
+        host=host,
+        port=port,
+        streamable_http_path=path,
+    )
 
 
 if __name__ == "__main__":

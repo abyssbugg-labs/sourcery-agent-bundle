@@ -203,6 +203,7 @@ def test_rovodev_installer_refreshes_stale_skill_symlink(tmp_path):
     skills_dir.mkdir(parents=True)
     stale = skills_dir / "sourcery-triage"
     stale.symlink_to("/nonexistent/old/location/skills/sourcery-triage")
+    (skills_dir / ".sourcery-agent-managed").write_text("sourcery-triage\n")
 
     result = subprocess.run(
         ["bash", str(REPO / "scripts" / "install-rovodev.sh")],
@@ -246,7 +247,10 @@ def test_rovodev_installer_preserves_unmanaged_symlinks(tmp_path):
 
 def test_version_is_consistent_across_manifests():
     """pyproject and both plugin manifests declare a single version."""
-    import tomllib
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # Python 3.10
+        import tomli as tomllib
 
     versions = {
         tomllib.loads((REPO / "pyproject.toml").read_text())["project"]["version"],
@@ -302,3 +306,80 @@ def test_rovodev_installer_never_overwrites_an_existing_backup(tmp_path):
     assert result.returncode == 0, result.stderr
     assert existing.read_text() == "precious\n"
     assert (rovodev / f"mcp.json.bak-{stamp}-2").is_file()
+
+
+def test_rovodev_installer_preserves_unmanifested_same_name_skill_link(tmp_path):
+    """A same-name link owned by another skills bundle is not adopted."""
+    import os
+    import subprocess
+
+    home = tmp_path / "home"
+    skills_dir = home / ".rovodev" / "skills"
+    skills_dir.mkdir(parents=True)
+    foreign_target = tmp_path / "foreign" / "skills" / "sourcery-triage"
+    foreign_target.mkdir(parents=True)
+    link = skills_dir / "sourcery-triage"
+    link.symlink_to(foreign_target, target_is_directory=True)
+
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    result = subprocess.run(
+        ["bash", str(REPO / "scripts" / "install-rovodev.sh"), "--skills-only"],
+        cwd=REPO,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert link.resolve() == foreign_target.resolve()
+    managed = {
+        line.strip()
+        for line in (skills_dir / ".sourcery-agent-managed").read_text().splitlines()
+        if line.strip()
+    }
+    assert "sourcery-triage" not in managed
+
+
+def test_bootstrap_quarantines_stale_lock_before_deleting_it():
+    """Stale lock reclamation never deletes the shared lock path in place."""
+    bootstrap = (REPO / "bin" / "_bootstrap").read_text()
+    marker = 'elif ! kill -0 "$owner" 2>/dev/null; then'
+    assert marker in bootstrap
+    stale_branch = bootstrap.split(marker, 1)[1].split("fi", 1)[0]
+
+    quarantine = 'mv "$LOCK_DIR" "$STALE_LOCK_DIR"'
+    cleanup = 'rm -rf "$STALE_LOCK_DIR"'
+    assert quarantine in stale_branch
+    assert cleanup in stale_branch
+    assert stale_branch.index(quarantine) < stale_branch.index(cleanup)
+    assert 'rm -rf "$LOCK_DIR"' not in stale_branch
+
+
+def test_mcp_dependency_is_bounded_below_version_three():
+    """The tested MCP 2.x integration cannot silently upgrade to MCP 3.x."""
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # Python 3.10
+        import tomli as tomllib
+
+    project = tomllib.loads((REPO / "pyproject.toml").read_text())
+    requirement = next(
+        item for item in project["project"]["dependencies"] if item.startswith("mcp[")
+    ).replace(" ", "")
+
+    assert requirement == "mcp[cli]>=2.0,<3"
+
+
+def test_balanced_github_actions_matrix_is_present():
+    """CI covers Python 3.10-3.13 on Linux and a macOS smoke run."""
+    workflow = REPO / ".github" / "workflows" / "ci.yml"
+
+    assert workflow.is_file()
+    content = workflow.read_text()
+    for version in ("3.10", "3.11", "3.12", "3.13"):
+        assert version in content
+    assert "ubuntu-latest" in content
+    assert "macos-latest" in content
+    assert "bin/prewarm" in content

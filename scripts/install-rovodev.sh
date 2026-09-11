@@ -64,10 +64,8 @@ for skill in sorted((plugin_root / "skills").iterdir()):
             managed.add(target.name)
             print(f"skill {target.name}: up to date")
             continue
-        # Refresh links this installer manages, plus pre-manifest bundle links
-        # that clearly point at a skills/<name> path; leave other user links alone.
-        pre_manifest = current.name == skill.name and current.parent.name == "skills"
-        if target.name in owned or pre_manifest:
+        # Refresh only links recorded in this installer's ownership manifest.
+        if target.name in owned:
             target.unlink()
             target.symlink_to(skill)
             managed.add(target.name)

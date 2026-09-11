@@ -101,3 +101,22 @@ def test_cli_output_strips_terminal_escape_sequences():
     assert "\x07" not in row
     assert "evil " in row
     assert "app.py" in row
+
+
+def test_for_display_recursively_sanitizes_nested_values():
+    """Nested mappings and sequences cannot retain terminal control bytes."""
+    payload = {
+        "details": [
+            {"fixed_versions": ["1.2.3\x1b]0;owned\x07"]},
+            ("safe\x1b[31m",),
+        ]
+    }
+
+    result = cli._for_display(payload)
+
+    assert result == {
+        "details": [
+            {"fixed_versions": ["1.2.3"]},
+            ("safe",),
+        ]
+    }

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 from typing import Any
 
@@ -35,25 +36,37 @@ class StaticTokenVerifier:
     """Verify the single pre-shared bearer token from SOURCERY_MCP_AUTH_TOKEN."""
 
     def __init__(self, token: str) -> None:
-        """Store the expected token."""
-        self._token = token
+        """Store the expected token as UTF-8 bytes for constant-time comparison."""
+        self._token = token.encode("utf-8")
 
     async def verify_token(self, token: str) -> AccessToken | None:
         """Return access info for a matching token, else None."""
-        if secrets.compare_digest(token, self._token):
+        token_bytes = token.encode("utf-8")
+        if secrets.compare_digest(token_bytes, self._token):
             return AccessToken(token=token, client_id="sourcery-remote", scopes=["sourcery"])
         return None
 
 
-def build_server(auth_token: str | None = None) -> MCPServer:
+def build_server(
+    auth_token: str | None = None,
+    resource_url: str | None = None,
+) -> MCPServer:
     """Create the MCP server; a configured token enables SDK bearer verification."""
     kwargs: dict[str, Any] = {}
     token = (auth_token or "").strip()
     if token:
-        resource_url = os.environ.get("SOURCERY_MCP_RESOURCE_URL") or "http://127.0.0.1:8765"
-        issuer_url = os.environ.get("SOURCERY_MCP_ISSUER_URL") or resource_url
+        resolved_resource_url = (
+            resource_url
+            or os.environ.get("SOURCERY_MCP_RESOURCE_URL")
+            or "http://127.0.0.1:8765/mcp"
+        )
+        issuer_url = os.environ.get("SOURCERY_MCP_ISSUER_URL") or resolved_resource_url
         kwargs["token_verifier"] = StaticTokenVerifier(token)
-        kwargs["auth"] = AuthSettings(issuer_url=issuer_url, resource_server_url=resource_url)
+        kwargs["auth"] = AuthSettings(
+            issuer_url=issuer_url,
+            resource_server_url=resolved_resource_url,
+            validate_token_resource=False,
+        )
     return MCPServer("Sourcery Agent Bundle", instructions=_INSTRUCTIONS, **kwargs)
 
 
@@ -311,7 +324,122 @@ def sourcery_api_request(
     if not isinstance(params, dict):
         raise ValueError("params_json must decode to an object")
 
-    return _client().request(method=method, path=path, params=params, json=body)
+    normalized_method = method.upper()
+    if normalized_method == "GET":
+        if body is not None:
+            raise ValueError(f"GET {path} does not accept a request body")
+        _validate_get_params(path, params)
+    elif normalized_method == "PATCH":
+        if params:
+            raise ValueError(f"PATCH {path} does not accept query parameters")
+        if not isinstance(body, dict):
+            raise ValueError("PATCH body must decode to an object")
+        _validate_patch_body(path, body)
+    else:
+        raise ValueError("method must be GET or PATCH")
+
+    return _client().request(
+        method=normalized_method,
+        path=path,
+        params=params,
+        json=body,
+    )
+
+
+_COLLECTION_PATHS = {
+    "/api/v1/security-issues",
+    "/api/v1/security-issue-groups",
+}
+_STATS_PATHS = {
+    "/api/v1/security-issues/statistics",
+    "/api/v1/security-issue-groups/statistics",
+}
+_ITEM_PATH = re.compile(
+    r"^/api/v1/security-(?:issues|issue-groups)/[1-9][0-9]*$"
+)
+
+
+def _positive_integer_list(
+    value: Any,
+    field: str,
+    *,
+    max_items: int | None = None,
+) -> list[int]:
+    """Validate a JSON array of positive integer identifiers."""
+    if not isinstance(value, list):
+        raise ValueError(f"{field} must be an array")
+    if not value:
+        raise ValueError(f"{field} must not be empty")
+    if max_items is not None and len(value) > max_items:
+        raise ValueError(f"{field} must contain at most {max_items} entries")
+    if any(type(item) is not int or item <= 0 for item in value):
+        raise ValueError(f"{field} must contain only positive integers")
+    return value
+
+
+def _validate_get_params(path: str, params: dict[str, Any]) -> None:
+    """Validate query parameters for one verified GET operation."""
+    if path in _COLLECTION_PATHS:
+        allowed = {"repository_ids", "issue_types", "statuses", "search", "limit", "cursor"}
+    elif path in _STATS_PATHS:
+        allowed = {"repository_ids", "issue_types"}
+    elif _ITEM_PATH.fullmatch(path):
+        allowed = set()
+    else:
+        raise ValueError(f"GET path is not a verified Sourcery operation: {path}")
+
+    unknown = set(params) - allowed
+    if unknown:
+        raise ValueError(f"Unknown parameters for {path}: {sorted(unknown)}")
+    if "repository_ids" in params:
+        _positive_integer_list(params["repository_ids"], "repository_ids")
+    if "issue_types" in params:
+        issue_types = params["issue_types"]
+        if not isinstance(issue_types, list):
+            raise ValueError("issue_types must be an array")
+        _check_subset(issue_types, constants.ISSUE_TYPES, "issue_types")
+    if "statuses" in params:
+        statuses = params["statuses"]
+        if not isinstance(statuses, list):
+            raise ValueError("statuses must be an array")
+        _check_subset(statuses, constants.STATUSES, "statuses")
+    if "limit" in params:
+        if type(params["limit"]) is not int:
+            raise ValueError("limit must be an integer")
+        _check_limit(params["limit"])
+    for field in ("search", "cursor"):
+        if field in params and params[field] is not None and not isinstance(params[field], str):
+            raise ValueError(f"{field} must be a string or null")
+
+
+def _validate_patch_body(path: str, body: dict[str, Any]) -> None:
+    """Validate a bulk update body for one verified PATCH operation."""
+    if path not in _COLLECTION_PATHS:
+        raise ValueError(f"PATCH path is not a verified Sourcery operation: {path}")
+    allowed = {"ids", "status", "snoozed_until", "severity_override", "reason"}
+    unknown = set(body) - allowed
+    if unknown:
+        raise ValueError(f"Unknown fields in PATCH {path}: {sorted(unknown)}")
+    if "ids" not in body:
+        raise ValueError(f"PATCH {path} requires 'ids' field")
+    _positive_integer_list(
+        body["ids"],
+        "ids",
+        max_items=constants.BULK_UPDATE_MAX_IDS,
+    )
+
+    status = body.get("status")
+    severity = body.get("severity_override")
+    _check_status(status)
+    _check_severity(severity)
+    for field in ("snoozed_until", "reason"):
+        if field in body and body[field] is not None and not isinstance(body[field], str):
+            raise ValueError(f"{field} must be a string or null")
+    validate_bulk_update(
+        status=status,
+        snoozed_until=body.get("snoozed_until"),
+        severity_override=severity,
+    )
 
 
 def main() -> None:
