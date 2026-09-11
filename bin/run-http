@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Launch the Sourcery MCP server over Streamable HTTP (for remote hosts such as
+# the ChatGPT developer-mode app flow, or self-hosting behind HTTPS).
+#
+# Endpoint: http://$SOURCERY_MCP_HOST:$SOURCERY_MCP_PORT/mcp  (defaults 127.0.0.1:8765)
+set -euo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_bootstrap"
+exec "$VENV_PY" -m sourcery_agent.http_server "$@"

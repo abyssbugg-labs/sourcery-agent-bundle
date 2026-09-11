@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "sourcery": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/run-server",
+      "env": {
+        "SOURCERY_API_KEY": "${user_config.sourcery_api_key}"
+      }
+    }
+  }
+}
