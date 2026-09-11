@@ -143,7 +143,7 @@ The bundle uses the official MCP Python SDK (`mcp[cli]>=2.0`, currently 2.2.0), 
 When Sourcery publishes a spec change:
 
 ```bash
-curl -sS -o openapi/sourcery-openapi.json https://api.sourcery.ai/api/openapi.json
+curl -sS --fail -o openapi/sourcery-openapi.json https://api.sourcery.ai/api/openapi.json
 shasum -a 256 openapi/sourcery-openapi.json   # update constants.SPEC_SHA256 + README/docs
 pytest                                        # allow-list tests fail on drift
 ```

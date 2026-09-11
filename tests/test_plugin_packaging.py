@@ -34,6 +34,22 @@ def _load(path: Path) -> dict:
     return json.loads(path.read_text())
 
 
+def _parse_front_matter(text: str) -> dict:
+    """Parse the leading YAML-style front matter block into a flat mapping."""
+    assert text.startswith("---\n"), "front matter must open with ---"
+    parts = text.split("---", 2)
+    assert len(parts) == 3, "front matter must close with ---"
+    fields = {}
+    for line in parts[1].splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        key, separator, value = stripped.partition(":")
+        if separator:
+            fields[key.strip()] = value.strip()
+    return fields
+
+
 def test_core_manifest_follows_agent_plugins_rules():
     """plugin.json stays inside the closed Agent Plugins core schema."""
     manifest = _load(REPO / "plugin.json")
@@ -56,7 +72,9 @@ def test_portable_mcp_config_is_valid_stdio():
     # Spec: single executable token, plugin-relative with ./ prefix.
     assert command.startswith("./")
     assert " " not in command
-    assert (REPO / command[2:]).is_file()
+    target = (REPO / command[2:]).resolve()
+    assert target.is_file()
+    assert target.is_relative_to(REPO.resolve()), "command escapes the plugin root"
 
 
 def test_claude_adapter_is_wired():
@@ -78,11 +96,10 @@ def test_skills_follow_agent_skills_layout():
     skill_files = sorted((REPO / "skills").glob("*/SKILL.md"))
     assert len(skill_files) >= 2
     for skill_md in skill_files:
-        text = skill_md.read_text()
-        assert text.startswith("---\n")
-        front_matter = text.split("---", 2)[1]
-        assert f"name: {skill_md.parent.name}" in front_matter
-        assert "description:" in front_matter
+        fields = _parse_front_matter(skill_md.read_text())
+        assert fields.get("name") == skill_md.parent.name
+        description = fields.get("description")
+        assert isinstance(description, str) and description.strip()
 
 
 def test_launchers_and_installer_are_executable():
@@ -140,11 +157,10 @@ def test_cli_and_prewarm_launchers_are_executable():
 
 def test_subagent_has_valid_frontmatter():
     """The triager subagent declares name and description frontmatter."""
-    text = (REPO / "agents" / "sourcery-triager.md").read_text()
-    assert text.startswith("---\n")
-    front_matter = text.split("---", 2)[1]
-    assert "name: sourcery-triager" in front_matter
-    assert "description:" in front_matter
+    fields = _parse_front_matter((REPO / "agents" / "sourcery-triager.md").read_text())
+    assert fields.get("name") == "sourcery-triager"
+    description = fields.get("description")
+    assert isinstance(description, str) and description.strip()
 
 
 def test_hooks_example_is_valid_json():

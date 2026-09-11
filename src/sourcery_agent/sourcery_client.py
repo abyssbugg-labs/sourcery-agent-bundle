@@ -74,13 +74,15 @@ def validate_bulk_update(
     snoozed_until: str | None,
     severity_override: str | None,
 ) -> None:
-    """Reject no-op updates and snooze values without SNOOZED."""
+    """Reject no-op updates and invalid snooze combinations."""
     if status is None and severity_override is None:
         raise ValueError(
             "bulk update requires status and/or severity_override; refusing to send a no-op PATCH"
         )
     if snoozed_until is not None and status != "SNOOZED":
         raise ValueError("snoozed_until is only valid with status='SNOOZED'")
+    if status == "SNOOZED" and snoozed_until is None:
+        raise ValueError("snoozed_until is required when status='SNOOZED'")
 
 
 class SourceryClient:
@@ -130,12 +132,12 @@ class SourceryClient:
             body = response.text[:2000]
             raise SourceryError(f"Sourcery returned HTTP {response.status_code}: {body}")
 
-        if not response.content:
-            return {"status_code": response.status_code}
         try:
             return response.json()
-        except ValueError:
-            return {"status_code": response.status_code, "text": response.text}
+        except ValueError as exc:
+            raise SourceryError(
+                f"Sourcery returned a non-JSON response (HTTP {response.status_code}): {response.text[:200]}"
+            ) from exc
 
     # -- security issues ---------------------------------------------------
 
