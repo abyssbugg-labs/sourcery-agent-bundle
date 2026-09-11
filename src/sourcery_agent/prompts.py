@@ -8,6 +8,7 @@ are still honoured when present, so UI exports render too.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 # Traversal caps for dependency chains: crafted or pathological graphs must not
@@ -36,9 +37,11 @@ def _render_source_snippet(finding: dict[str, Any]) -> str | None:
     source_code = finding.get("source_code")
     if not source_code:
         return None
+    longest_run = max((len(run) for run in re.findall(r"`+", source_code)), default=0)
+    fence = "`" * max(3, longest_run + 1)
     line_start = finding.get("source_code_line_start") or finding.get("line_start")
     header = f"(snippet from line {line_start})" if line_start else "(snippet)"
-    return f"{header}\n```\n{source_code}\n```"
+    return f"{header}\n{fence}\n{source_code}\n{fence}"
 
 
 def _render_dependency_chain(finding: dict[str, Any]) -> str | None:

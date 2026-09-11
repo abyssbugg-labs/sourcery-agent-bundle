@@ -16,7 +16,7 @@ from mcp.server.mcpserver import MCPServer
 
 from . import constants
 from .prompts import build_fix_prompt
-from .sourcery_client import SourceryClient
+from .sourcery_client import SourceryClient, validate_bulk_update
 
 mcp = MCPServer(
     "Sourcery Agent Bundle",
@@ -173,11 +173,14 @@ def sourcery_bulk_update_findings(
 
     Returns `updated_ids` plus `failed` entries with reason `not_found` or `not_eligible`.
     """
+    status = _check_status(status)
+    severity_override = _check_severity(severity_override)
+    validate_bulk_update(status=status, snoozed_until=snoozed_until, severity_override=severity_override)
     return _client().bulk_update_issues(
         ids=ids,
-        status=_check_status(status),
+        status=status,
         snoozed_until=snoozed_until,
-        severity_override=_check_severity(severity_override),
+        severity_override=severity_override,
         reason=reason,
     )
 
@@ -229,11 +232,14 @@ def sourcery_bulk_update_groups(
     reason: str | None = None,
 ) -> Any:
     """Bulk-update groups (max 100 ids); a group updates when at least one issue changes."""
+    status = _check_status(status)
+    severity_override = _check_severity(severity_override)
+    validate_bulk_update(status=status, snoozed_until=snoozed_until, severity_override=severity_override)
     return _client().bulk_update_groups(
         ids=ids,
-        status=_check_status(status),
+        status=status,
         snoozed_until=snoozed_until,
-        severity_override=_check_severity(severity_override),
+        severity_override=severity_override,
         reason=reason,
     )
 

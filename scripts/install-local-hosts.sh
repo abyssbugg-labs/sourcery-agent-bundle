@@ -17,6 +17,22 @@ RUN_SERVER="$PLUGIN_ROOT/bin/run-server"
 
 echo "plugin root: $PLUGIN_ROOT"
 
+# Link each skill into a host skills directory. `ln -sfn DEST` creates the link
+# *inside* an existing real directory, so real directories are left alone.
+link_skills() {
+  local dest_dir="$1"
+  mkdir -p "$dest_dir"
+  for skill in "$PLUGIN_ROOT"/skills/*/; do
+    local source="${skill%/}"
+    local dest="$dest_dir/$(basename "$source")"
+    if [ -e "$dest" ] && [ ! -L "$dest" ]; then
+      echo "skills: $dest is a real directory, leaving as-is"
+      continue
+    fi
+    ln -sfn "$source" "$dest"
+  done
+}
+
 # --- grok ------------------------------------------------------------------
 if command -v grok >/dev/null 2>&1; then
   if grok mcp list 2>/dev/null | grep -q "sourcery"; then
@@ -24,10 +40,7 @@ if command -v grok >/dev/null 2>&1; then
   else
     grok mcp add sourcery --scope user -- "$RUN_SERVER" >/dev/null && echo "grok: added sourcery MCP server (user scope)"
   fi
-  mkdir -p "$HOME/.grok/skills"
-  for skill in "$PLUGIN_ROOT"/skills/*/; do
-    ln -sfn "${skill%/}" "$HOME/.grok/skills/$(basename "$skill")"
-  done
+  link_skills "$HOME/.grok/skills"
   echo "grok: skills linked into ~/.grok/skills/"
 else
   echo "grok: not installed, skipping"
@@ -57,10 +70,7 @@ if command -v hermes >/dev/null 2>&1; then
   else
     hermes mcp add sourcery --command "$RUN_SERVER" </dev/null >/dev/null && echo "hermes: added sourcery MCP server"
   fi
-  mkdir -p "$HOME/.hermes/skills"
-  for skill in "$PLUGIN_ROOT"/skills/*/; do
-    ln -sfn "${skill%/}" "$HOME/.hermes/skills/$(basename "$skill")"
-  done
+  link_skills "$HOME/.hermes/skills"
   echo "hermes: skills linked into ~/.hermes/skills/"
 else
   echo "hermes: not installed, skipping"
@@ -87,19 +97,13 @@ fi
 DEVIN_LINKED=0
 for d in "$HOME/.config/devin" "$HOME/.devin"; do
   if [ -d "$d" ]; then
-    mkdir -p "$d/skills"
-    for skill in "$PLUGIN_ROOT"/skills/*/; do
-      ln -sfn "${skill%/}" "$d/skills/$(basename "$skill")"
-    done
+    link_skills "$d/skills"
     echo "devin: skills linked in $d/skills"
     DEVIN_LINKED=1
   fi
 done
 if [ "$DEVIN_LINKED" -eq 0 ] && command -v devin >/dev/null 2>&1; then
-  mkdir -p "$HOME/.config/devin/skills"
-  for skill in "$PLUGIN_ROOT"/skills/*/; do
-    ln -sfn "${skill%/}" "$HOME/.config/devin/skills/$(basename "$skill")"
-  done
+  link_skills "$HOME/.config/devin/skills"
   echo "devin: skills linked in $HOME/.config/devin/skills"
   DEVIN_LINKED=1
 fi
@@ -115,7 +119,6 @@ python3 - "$PLUGIN_ROOT" <<'PY'
 import json
 import os
 import pathlib
-import re
 import shutil
 import sys
 import time
@@ -175,9 +178,17 @@ def strip_jsonc(text: str) -> str:
             j = text.find("*/", i + 2)
             i = n if j == -1 else j + 2
         else:
+            if ch == ",":
+                lookahead = i + 1
+                while lookahead < n and text[lookahead] in " \t\r\n":
+                    lookahead += 1
+                if lookahead < n and text[lookahead] in "}]":
+                    # Trailing comma outside any string: drop it.
+                    i += 1
+                    continue
             out.append(ch)
             i += 1
-    return re.sub(r",\s*([}\]])", r"\1", "".join(out))
+    return "".join(out)
 
 
 try:
@@ -190,7 +201,12 @@ locations = data.setdefault("chat.pluginLocations", {})
 if locations.get(repo) is True:
     print("vscode: plugin location already enabled")
 else:
-    backup = settings.with_name(f"settings.json.bak-agp-{time.strftime('%Y%m%d-%H%M%S')}")
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    backup = settings.with_name(f"settings.json.bak-agp-{stamp}")
+    counter = 1
+    while backup.exists():
+        counter += 1
+        backup = settings.with_name(f"settings.json.bak-agp-{stamp}-{counter}")
     shutil.copy2(settings, backup)
     locations[repo] = True
     if "chat.plugins.enabled" not in data:

@@ -68,7 +68,7 @@ def _checked_limit(limit: int | None) -> int | None:
     return limit
 
 
-def _validate_bulk_update(
+def validate_bulk_update(
     *,
     status: str | None,
     snoozed_until: str | None,
@@ -186,7 +186,7 @@ class SourceryClient:
         reason: str | None = None,
     ) -> Any:
         """PATCH a status/severity change onto up to 100 issues."""
-        _validate_bulk_update(status=status, snoozed_until=snoozed_until, severity_override=severity_override)
+        validate_bulk_update(status=status, snoozed_until=snoozed_until, severity_override=severity_override)
         body = _without_none(
             {
                 "ids": _checked_ids(ids),
@@ -247,7 +247,7 @@ class SourceryClient:
         reason: str | None = None,
     ) -> Any:
         """PATCH a status/severity change onto up to 100 groups."""
-        _validate_bulk_update(status=status, snoozed_until=snoozed_until, severity_override=severity_override)
+        validate_bulk_update(status=status, snoozed_until=snoozed_until, severity_override=severity_override)
         body = _without_none(
             {
                 "ids": _checked_ids(ids),

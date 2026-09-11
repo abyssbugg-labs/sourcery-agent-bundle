@@ -238,3 +238,53 @@ def test_version_is_consistent_across_manifests():
         _load(REPO / ".claude-plugin" / "plugin.json")["version"],
     }
     assert len(versions) == 1, f"mismatched versions: {versions}"
+
+
+def test_vscode_installer_preserves_quoted_brace_comma_values(tmp_path):
+    """The JSONC cleaner keeps quoted values and strips only real trailing commas."""
+    import os
+    import subprocess
+
+    settings_dir = tmp_path / "CodeUser"
+    settings_dir.mkdir()
+    (settings_dir / "settings.json").write_text('{\n  "note": ",}",\n  "keep": true,\n}\n')
+
+    script = (REPO / "scripts" / "install-local-hosts.sh").read_text()
+    block = script.split("<<'PY'\n", 1)[1].split("\nPY\n", 1)[0]
+    result = subprocess.run(
+        ["python3", "-c", block, str(REPO)],
+        env={**os.environ, "VSCODE_USER_DIR": str(settings_dir)},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    data = json.loads((settings_dir / "settings.json").read_text())
+    assert data["note"] == ",}"
+    assert data["keep"] is True
+    assert str(REPO) in data["chat.pluginLocations"]
+
+
+def test_rovodev_installer_never_overwrites_an_existing_backup(tmp_path):
+    """Same-second installs reserve a fresh backup path instead of clobbering."""
+    import os
+    import subprocess
+    import time
+
+    home = tmp_path / "home"
+    rovodev = home / ".rovodev"
+    rovodev.mkdir(parents=True)
+    (rovodev / "mcp.json").write_text("{}\n")
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    existing = rovodev / f"mcp.json.bak-{stamp}"
+    existing.write_text("precious\n")
+
+    result = subprocess.run(
+        ["bash", str(REPO / "scripts" / "install-rovodev.sh")],
+        env={**os.environ, "HOME": str(home)},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert existing.read_text() == "precious\n"
+    backups = sorted(rovodev.glob("mcp.json.bak-*"))
+    assert len(backups) >= 2
