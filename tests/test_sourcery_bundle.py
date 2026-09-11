@@ -224,6 +224,17 @@ def test_bulk_update_requires_a_change_before_network(monkeypatch):
         client.bulk_update_groups(ids=[1])
 
 
+def test_bulk_update_rejects_unknown_status_before_network(monkeypatch):
+    """Statuses outside the SecurityStatusInput enum fail locally."""
+    monkeypatch.setenv("SOURCERY_API_KEY", "test-key")
+    monkeypatch.setattr("sourcery_agent.sourcery_client.httpx.Client", _NetworkBoom)
+    client = SourceryClient()
+    with pytest.raises(ValueError):
+        client.bulk_update_issues(ids=[1], status="SOLVED")
+    with pytest.raises(ValueError):
+        client.bulk_update_groups(ids=[1], status="SOLVED")
+
+
 def test_http_server_refuses_public_bind_without_optin(monkeypatch):
     """Non-loopback binds are refused without explicit opt-in."""
     from sourcery_agent import http_server
@@ -380,6 +391,42 @@ def test_non_json_success_response_raises(monkeypatch):
     """2xx responses without JSON bodies raise instead of returning fallbacks."""
     monkeypatch.setenv("SOURCERY_API_KEY", "test-key")
     monkeypatch.setattr("sourcery_agent.sourcery_client.httpx.Client", _EmptyResponseHTTPClient)
+    client = SourceryClient()
+    with pytest.raises(SourceryError):
+        client.request(method="GET", path="/api/v1/security-issues")
+
+
+class _ScalarJSONResponse:
+    status_code = 200
+    text = "[]"
+
+    def json(self):
+        """Return valid JSON that is not an object."""
+        return []
+
+
+class _ScalarResponseHTTPClient:
+    def __init__(self, **kwargs):
+        """Accept the same constructor kwargs as httpx.Client."""
+        pass
+
+    def __enter__(self):
+        """Enter the client context."""
+        return self
+
+    def __exit__(self, *exc):
+        """Exit the client context without suppressing exceptions."""
+        return False
+
+    def request(self, **kwargs):
+        """Return a valid-JSON, non-object 200 response."""
+        return _ScalarJSONResponse()
+
+
+def test_non_object_success_response_raises(monkeypatch):
+    """2xx JSON scalars or arrays raise instead of leaking non-objects."""
+    monkeypatch.setenv("SOURCERY_API_KEY", "test-key")
+    monkeypatch.setattr("sourcery_agent.sourcery_client.httpx.Client", _ScalarResponseHTTPClient)
     client = SourceryClient()
     with pytest.raises(SourceryError):
         client.request(method="GET", path="/api/v1/security-issues")

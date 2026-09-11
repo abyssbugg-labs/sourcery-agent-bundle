@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx
 
-from .constants import API_BASE, BULK_UPDATE_MAX_IDS, LIST_MAX_LIMIT
+from .constants import API_BASE, BULK_UPDATE_MAX_IDS, LIST_MAX_LIMIT, STATUS_INPUTS
 
 _EXACT_OPERATIONS: frozenset[tuple[str, str]] = frozenset(
     {
@@ -76,11 +76,13 @@ def validate_bulk_update(
     snoozed_until: str | None,
     severity_override: str | None,
 ) -> None:
-    """Reject no-op updates and invalid snooze combinations."""
+    """Reject no-op updates, unknown statuses, and invalid snooze combinations."""
     if status is None and severity_override is None:
         raise ValueError(
             "bulk update requires status and/or severity_override; refusing to send a no-op PATCH"
         )
+    if status is not None and status not in STATUS_INPUTS:
+        raise ValueError(f"status must be one of {STATUS_INPUTS}; got {status!r}")
     if snoozed_until is not None and status != "SNOOZED":
         raise ValueError("snoozed_until is only valid with status='SNOOZED'")
     if status == "SNOOZED" and snoozed_until is None:
@@ -108,7 +110,7 @@ class SourceryClient:
         params: dict[str, Any] | None = None,
         json: Any = None,
     ) -> Any:
-        """Perform one allow-listed API request and return the decoded JSON."""
+        """Perform one allow-listed API request and return the decoded JSON object."""
         method = method.upper().strip()
         ensure_allowed(method, path)
 
@@ -137,11 +139,16 @@ class SourceryClient:
             raise SourceryError(f"Sourcery returned HTTP {response.status_code}: {body}")
 
         try:
-            return response.json()
+            data = response.json()
         except ValueError as exc:
             raise SourceryError(
                 f"Sourcery returned a non-JSON response (HTTP {response.status_code}): {response.text[:200]}"
             ) from exc
+        if not isinstance(data, dict):
+            raise SourceryError(
+                f"Sourcery returned a non-object JSON response (HTTP {response.status_code}): {str(data)[:200]}"
+            )
+        return data
 
     # -- security issues ---------------------------------------------------
 
