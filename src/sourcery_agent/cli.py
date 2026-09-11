@@ -220,10 +220,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    _load_key()
     try:
+        _load_key()
         return args.func(args)
-    except (SourceryError, ValueError) as exc:
+    except (SourceryError, ValueError, OSError) as exc:
         print(f"sourcery-agent: {exc}", file=sys.stderr)
         return 1
 

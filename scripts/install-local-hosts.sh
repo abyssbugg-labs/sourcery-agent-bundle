@@ -57,6 +57,7 @@ if command -v hermes >/dev/null 2>&1; then
   else
     hermes mcp add sourcery --command "$RUN_SERVER" </dev/null >/dev/null && echo "hermes: added sourcery MCP server"
   fi
+  mkdir -p "$HOME/.hermes/skills"
   for skill in "$PLUGIN_ROOT"/skills/*/; do
     ln -sfn "${skill%/}" "$HOME/.hermes/skills/$(basename "$skill")"
   done
@@ -83,14 +84,28 @@ else
 fi
 
 # --- devin (skills; the CLI plugin route is documented, not automated) -------
-for d in "$HOME/.config/devin/skills" "$HOME/.devin/skills"; do
+DEVIN_LINKED=0
+for d in "$HOME/.config/devin" "$HOME/.devin"; do
   if [ -d "$d" ]; then
+    mkdir -p "$d/skills"
     for skill in "$PLUGIN_ROOT"/skills/*/; do
-      ln -sfn "${skill%/}" "$d/$(basename "$skill")"
+      ln -sfn "${skill%/}" "$d/skills/$(basename "$skill")"
     done
-    echo "devin: skills linked in $d"
+    echo "devin: skills linked in $d/skills"
+    DEVIN_LINKED=1
   fi
 done
+if [ "$DEVIN_LINKED" -eq 0 ] && command -v devin >/dev/null 2>&1; then
+  mkdir -p "$HOME/.config/devin/skills"
+  for skill in "$PLUGIN_ROOT"/skills/*/; do
+    ln -sfn "${skill%/}" "$HOME/.config/devin/skills/$(basename "$skill")"
+  done
+  echo "devin: skills linked in $HOME/.config/devin/skills"
+  DEVIN_LINKED=1
+fi
+if [ "$DEVIN_LINKED" -eq 0 ]; then
+  echo "devin: not detected, skipping"
+fi
 if command -v devin >/dev/null 2>&1; then
   echo "devin: for full plugin support run: devin plugins install --local \"$PLUGIN_ROOT\""
 fi
@@ -98,6 +113,7 @@ fi
 # --- VS Code (chat.pluginLocations) ------------------------------------------
 python3 - "$PLUGIN_ROOT" <<'PY'
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -105,9 +121,31 @@ import sys
 import time
 
 repo = sys.argv[1]
-settings = pathlib.Path.home() / "Library/Application Support/Code/User/settings.json"
-if not settings.exists():
-    print("vscode: settings.json not found, skipping")
+
+
+def _vscode_settings():
+    override = os.environ.get("VSCODE_USER_DIR")
+    if override:
+        candidates = [pathlib.Path(override)]
+    elif sys.platform == "darwin":
+        candidates = [pathlib.Path.home() / "Library/Application Support/Code/User"]
+    elif sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        candidates = [pathlib.Path(appdata) / "Code/User"] if appdata else []
+    elif sys.platform.startswith("linux"):
+        candidates = [pathlib.Path.home() / ".config/Code/User"]
+    else:
+        candidates = []
+    for directory in candidates:
+        settings = directory / "settings.json"
+        if settings.exists():
+            return settings
+    return None
+
+
+settings = _vscode_settings()
+if settings is None:
+    print("vscode: settings.json not found (set VSCODE_USER_DIR to override), skipping")
     raise SystemExit(0)
 
 

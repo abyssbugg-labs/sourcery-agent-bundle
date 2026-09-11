@@ -29,6 +29,8 @@ STATUS_INPUTS = ("ACTIVE", "IGNORED", "SNOOZED")
 SEVERITIES = ("NO_RISK", "LOW", "MEDIUM", "HIGH", "CRITICAL")
 
 BULK_UPDATE_MAX_IDS = 100
+# Page-size cap for the list endpoints (the spec's `limit` maximum is 100).
+LIST_MAX_LIMIT = 100
 
 # The exact operations in the pinned document. `{id}` stands for an integer
 # path parameter.

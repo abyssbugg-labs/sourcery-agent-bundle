@@ -1,6 +1,10 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "sourcery-agent-bundle"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP starter bundle for Sourcery security findings and agent remediation workflows"
 requires-python = ">=3.10"
 dependencies = [

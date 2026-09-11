@@ -12,6 +12,7 @@ PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 python3 - "$PLUGIN_ROOT" <<'PY'
 import json
+import os
 import pathlib
 import shutil
 import sys
@@ -41,15 +42,42 @@ print(f"registered 'sourcery' server in {cfg_path}")
 # --- skills -----------------------------------------------------------------
 skills_dst = home / ".rovodev" / "skills"
 skills_dst.mkdir(parents=True, exist_ok=True)
+
+managed_file = skills_dst / ".sourcery-agent-managed"
+owned = set()
+if managed_file.is_file():
+    owned = {line.strip() for line in managed_file.read_text().splitlines() if line.strip()}
+managed = set()
+
 for skill in sorted((plugin_root / "skills").iterdir()):
     if not (skill / "SKILL.md").is_file():
         continue
     target = skills_dst / skill.name
-    if target.exists() or target.is_symlink():
-        print(f"skill {target.name}: already present, leaving as-is")
+    if target.is_symlink():
+        current = pathlib.Path(os.readlink(target))
+        if current.resolve() == skill.resolve():
+            managed.add(target.name)
+            print(f"skill {target.name}: up to date")
+            continue
+        # Refresh links this installer manages, plus pre-manifest bundle links
+        # that clearly point at a skills/<name> path; leave other user links alone.
+        pre_manifest = current.name == skill.name and current.parent.name == "skills"
+        if target.name in owned or pre_manifest:
+            target.unlink()
+            target.symlink_to(skill)
+            managed.add(target.name)
+            print(f"skill {target.name}: stale symlink refreshed -> {skill}")
+            continue
+        print(f"skill {target.name}: symlink not managed by this installer, leaving as-is")
+        continue
+    if target.exists():
+        print(f"skill {target.name}: real directory present, leaving as-is")
         continue
     target.symlink_to(skill)
+    managed.add(target.name)
     print(f"skill linked: {target}")
+
+managed_file.write_text("\n".join(sorted(managed)) + "\n")
 PY
 
 echo "Done. Restart Rovo Dev (review the config with 'acli rovodev mcp') to pick up the changes."

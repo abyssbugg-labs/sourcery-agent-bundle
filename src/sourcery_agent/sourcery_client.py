@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx
 
-from .constants import API_BASE, BULK_UPDATE_MAX_IDS
+from .constants import API_BASE, BULK_UPDATE_MAX_IDS, LIST_MAX_LIMIT
 
 _EXACT_OPERATIONS: frozenset[tuple[str, str]] = frozenset(
     {
@@ -57,12 +57,37 @@ def _checked_ids(ids: list[int]) -> list[int]:
     return [int(value) for value in ids]
 
 
+def _checked_limit(limit: int | None) -> int | None:
+    if limit is None:
+        return None
+    if not 1 <= limit <= LIST_MAX_LIMIT:
+        raise ValueError(f"limit must be between 1 and {LIST_MAX_LIMIT}; got {limit}")
+    return limit
+
+
+def _validate_bulk_update(
+    *,
+    status: str | None,
+    snoozed_until: str | None,
+    severity_override: str | None,
+) -> None:
+    if status is None and severity_override is None:
+        raise ValueError(
+            "bulk update requires status and/or severity_override; refusing to send a no-op PATCH"
+        )
+    if snoozed_until is not None and status != "SNOOZED":
+        raise ValueError("snoozed_until is only valid with status='SNOOZED'")
+
+
 class SourceryClient:
     def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
         self.api_key = api_key or os.getenv("SOURCERY_API_KEY")
         if not self.api_key:
             raise SourceryError("SOURCERY_API_KEY is not configured")
-        self.base_url = (base_url or os.getenv("SOURCERY_API_BASE") or API_BASE).rstrip("/")
+        resolved_base = (base_url or os.getenv("SOURCERY_API_BASE") or API_BASE).rstrip("/")
+        if not resolved_base.startswith("https://"):
+            raise SourceryError(f"SOURCERY_API_BASE must be an https:// URL; got {resolved_base!r}")
+        self.base_url = resolved_base
 
     def request(
         self,
@@ -125,7 +150,7 @@ class SourceryClient:
                 "statuses": statuses,
                 "search": search,
                 "cursor": cursor,
-                "limit": limit,
+                "limit": _checked_limit(limit),
             }
         )
         return self.request(method="GET", path="/api/v1/security-issues", params=params)
@@ -151,6 +176,7 @@ class SourceryClient:
         severity_override: str | None = None,
         reason: str | None = None,
     ) -> Any:
+        _validate_bulk_update(status=status, snoozed_until=snoozed_until, severity_override=severity_override)
         body = _without_none(
             {
                 "ids": _checked_ids(ids),
@@ -181,7 +207,7 @@ class SourceryClient:
                 "statuses": statuses,
                 "search": search,
                 "cursor": cursor,
-                "limit": limit,
+                "limit": _checked_limit(limit),
             }
         )
         return self.request(method="GET", path="/api/v1/security-issue-groups", params=params)
@@ -207,6 +233,7 @@ class SourceryClient:
         severity_override: str | None = None,
         reason: str | None = None,
     ) -> Any:
+        _validate_bulk_update(status=status, snoozed_until=snoozed_until, severity_override=severity_override)
         body = _without_none(
             {
                 "ids": _checked_ids(ids),
