@@ -26,7 +26,7 @@ Status: **wired.** The bundle is generated against the live Sourcery OpenAPI doc
 ## Refreshing the snapshot
 
 ```bash
-curl -sS -o openapi/sourcery-openapi.json https://api.sourcery.ai/api/openapi.json
+curl -sS --fail -o openapi/sourcery-openapi.json https://api.sourcery.ai/api/openapi.json
 shasum -a 256 openapi/sourcery-openapi.json
 ```
 

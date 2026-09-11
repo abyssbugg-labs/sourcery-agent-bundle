@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,23 @@ from .prompts import build_fix_prompt
 from .sourcery_client import SourceryClient, SourceryError
 
 _SEVERITY_RANK = {name: rank for rank, name in enumerate(constants.SEVERITIES)}
+
+# Terminal escape injection: strip ANSI CSI/OSC sequences and control bytes from
+# untrusted finding text before rendering (JSON output stays raw data).
+_ESCAPE_SEQUENCES = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def sanitize_for_terminal(text: str) -> str:
+    """Strip ANSI/OSC escape sequences and control characters from untrusted text."""
+    return _ESCAPE_SEQUENCES.sub("", text)
+
+
+def _for_display(finding: dict[str, Any]) -> dict[str, Any]:
+    """Copy a finding with untrusted string fields sanitized for terminal display."""
+    return {
+        key: (sanitize_for_terminal(value) if isinstance(value, str) else value)
+        for key, value in finding.items()
+    }
 
 
 def usable_key(value: str | None) -> bool:
@@ -47,17 +65,17 @@ def _load_key() -> None:
 
 def format_finding_row(finding: dict[str, Any]) -> str:
     """Render one finding as a single fixed-width table row."""
-    finding_id = str(finding.get("id", "?"))
-    severity = str(finding.get("severity", "?"))
-    issue_type = str(finding.get("issue_type", "?"))
-    status = str(finding.get("status", "?"))
-    location = str(finding.get("file_path") or "")
+    finding_id = sanitize_for_terminal(str(finding.get("id", "?")))
+    severity = sanitize_for_terminal(str(finding.get("severity", "?")))
+    issue_type = sanitize_for_terminal(str(finding.get("issue_type", "?")))
+    status = sanitize_for_terminal(str(finding.get("status", "?")))
+    location = sanitize_for_terminal(str(finding.get("file_path") or ""))
     if not location and finding.get("package_name"):
         version = f"@{finding['package_version']}" if finding.get("package_version") else ""
-        location = f"{finding['package_name']}{version}"
+        location = sanitize_for_terminal(f"{finding['package_name']}{version}")
     if len(location) > 34:
         location = "..." + location[-31:]
-    title = str(finding.get("title") or "").strip()
+    title = sanitize_for_terminal(str(finding.get("title") or "").strip())
     if len(title) > 60:
         title = title[:57] + "..."
     return f"{finding_id:>7}  {severity:<8}  {issue_type:<10}  {status:<8}  {location:<34}  {title}"
@@ -128,6 +146,7 @@ def cmd_get(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(finding, indent=2))
         return 0
+    finding = _for_display(finding)
     print(f"#{finding.get('id')}  {finding.get('title')}")
     print(
         f"severity={finding.get('severity')} status={finding.get('status')} "

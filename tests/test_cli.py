@@ -71,3 +71,28 @@ def test_main_reports_key_file_read_errors(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("SOURCERY_API_KEY_FILE", str(key_file))
     assert cli.main(["snapshot"]) == 1
     assert "sourcery-agent:" in capsys.readouterr().err
+
+
+def test_sanitize_for_terminal_removes_sequences():
+    """ANSI/OSC escapes and control bytes are stripped."""
+    assert cli.sanitize_for_terminal("a\x1b[31mb") == "ab"
+    assert cli.sanitize_for_terminal("x\x07y") == "xy"
+    assert cli.sanitize_for_terminal("ok\nline") == "ok\nline"
+
+
+def test_cli_output_strips_terminal_escape_sequences():
+    """Finding text cannot inject terminal control sequences into table output."""
+    row = cli.format_finding_row(
+        {
+            "id": 1,
+            "severity": "HIGH",
+            "issue_type": "SAST",
+            "status": "ACTIVE",
+            "title": "evil \x1b]0;owned\x07 title",
+            "file_path": "src/\x1b[31mapp.py",
+        }
+    )
+    assert "\x1b" not in row
+    assert "\x07" not in row
+    assert "evil " in row
+    assert "app.py" in row
