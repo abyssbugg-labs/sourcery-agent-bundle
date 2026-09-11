@@ -5,10 +5,11 @@ ChatGPT developer-mode app flow), where a local stdio process is not possible.
 The stdio path remains ``python -m sourcery_agent.server``.
 
 Security: this transport serves the full tool set — including bulk updates —
-with the process's Sourcery API key, so it is loopback-only by default. Binding
-a non-loopback host requires ``SOURCERY_MCP_ALLOW_REMOTE=1`` **and** a
-``SOURCERY_MCP_AUTH_TOKEN``; the server does not terminate request auth itself,
-so the token must be enforced by a fronting proxy (see docs/COMPATIBILITY.md).
+with the process's Sourcery API key, so it is loopback-only by default. Remote
+mode requires ``SOURCERY_MCP_ALLOW_REMOTE=1`` **and** a non-empty
+``SOURCERY_MCP_AUTH_TOKEN``; when a token is configured the MCP SDK's bearer
+verifier requires ``Authorization: Bearer <token>`` on every request (terminate
+TLS in front — see docs/COMPATIBILITY.md).
 """
 
 from __future__ import annotations
@@ -38,13 +39,14 @@ def check_bind_allowed(host: str) -> None:
         raise SystemExit(
             f"refusing to bind SOURCERY_MCP_HOST={host!r}: the HTTP transport exposes "
             "Sourcery findings and bulk updates with this process's API key. Set "
-            "SOURCERY_MCP_ALLOW_REMOTE=1 and SOURCERY_MCP_AUTH_TOKEN, and require that "
-            "token at your reverse proxy."
+            "SOURCERY_MCP_ALLOW_REMOTE=1 and SOURCERY_MCP_AUTH_TOKEN to enable "
+            "authenticated remote mode."
         )
     if not os.getenv("SOURCERY_MCP_AUTH_TOKEN", "").strip():
         raise SystemExit(
             "refusing to bind a non-loopback SOURCERY_MCP_HOST without "
-            "SOURCERY_MCP_AUTH_TOKEN; set the token and enforce it at your reverse proxy."
+            "SOURCERY_MCP_AUTH_TOKEN; remote mode requires SDK-enforced bearer "
+            "authentication on every request."
         )
 
 

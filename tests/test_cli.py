@@ -66,9 +66,14 @@ def test_main_reports_key_file_read_errors(tmp_path, monkeypatch, capsys):
     """Unreadable key files fail cleanly instead of raising."""
     key_file = tmp_path / "unreadable-key"
     key_file.write_text("not-used")
-    key_file.chmod(0)
+
+    def _denied(self, *args, **kwargs):
+        """Simulate an unreadable key file."""
+        raise PermissionError("permission denied")
+
     monkeypatch.delenv("SOURCERY_API_KEY", raising=False)
     monkeypatch.setenv("SOURCERY_API_KEY_FILE", str(key_file))
+    monkeypatch.setattr(cli.Path, "read_text", _denied)
     assert cli.main(["snapshot"]) == 1
     assert "sourcery-agent:" in capsys.readouterr().err
 

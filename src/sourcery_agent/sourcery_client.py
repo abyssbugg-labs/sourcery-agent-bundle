@@ -32,6 +32,8 @@ _DETAIL_OPERATION = re.compile(r"^/api/v1/(?:security-issues|security-issue-grou
 
 
 class SourceryError(RuntimeError):
+    """Report Sourcery API or configuration failures raised by this bundle."""
+
     pass
 
 
@@ -86,6 +88,8 @@ def validate_bulk_update(
 
 
 class SourceryClient:
+    """Minimal client confined to the pinned Sourcery API operation surface."""
+
     def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
         """Resolve the API key and base URL (https only); raise without a key."""
         self.api_key = api_key or os.getenv("SOURCERY_API_KEY")

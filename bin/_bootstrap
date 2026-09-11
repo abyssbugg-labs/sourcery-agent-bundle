@@ -66,13 +66,23 @@ needs_install() {
 
 if needs_install; then
   # Serialize concurrent launchers with a portable atomic mkdir lock
-  # (flock(1) is not available on stock macOS).
+  # (flock(1) is not available on stock macOS). The lock records its owner PID
+  # and is only reclaimed once that owner is no longer running.
   LOCK_DIR="$DATA_DIR/.bootstrap-lock"
-  tries=0
-  while ! mkdir "$LOCK_DIR" 2>/dev/null; do
-    tries=$((tries + 1))
-    if [ "$tries" -ge 300 ]; then
-      # ~60s of waiting: assume a stale lock from a crashed install and take it over.
+  while :; do
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+      printf '%s\n' "$$" > "$LOCK_DIR/pid" 2>/dev/null || true
+      trap 'rm -rf "$LOCK_DIR" 2>/dev/null' EXIT
+      trap 'rm -rf "$LOCK_DIR" 2>/dev/null; exit 130' INT TERM
+      break
+    fi
+    owner="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+    if [ -z "$owner" ]; then
+      # No recorded owner: reclaim only a clearly abandoned lock (10+ minutes old).
+      if [ -n "$(find "$LOCK_DIR" -maxdepth 0 -mmin +10 -print -quit 2>/dev/null)" ]; then
+        rm -rf "$LOCK_DIR" 2>/dev/null || true
+      fi
+    elif ! kill -0 "$owner" 2>/dev/null; then
       rm -rf "$LOCK_DIR" 2>/dev/null || true
     fi
     sleep 0.2 2>/dev/null || sleep 1
@@ -88,7 +98,8 @@ if needs_install; then
     "$VENV_DIR/bin/pip" install --quiet --upgrade --disable-pip-version-check -e "$PLUGIN_ROOT" >&2
     printf '%s\n' "$PLUGIN_ROOT" > "$STAMP"
   fi
-  rmdir "$LOCK_DIR" 2>/dev/null || rm -rf "$LOCK_DIR" 2>/dev/null || true
+  rm -rf "$LOCK_DIR" 2>/dev/null || true
+  trap - EXIT INT TERM
 fi
 
 VENV_PY="$VENV_DIR/bin/python"

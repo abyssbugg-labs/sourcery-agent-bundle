@@ -281,26 +281,24 @@ def test_vscode_installer_preserves_quoted_brace_comma_values(tmp_path):
 
 
 def test_rovodev_installer_never_overwrites_an_existing_backup(tmp_path):
-    """Same-second installs reserve a fresh backup path instead of clobbering."""
+    """Same-stamp installs reserve a fresh backup path instead of clobbering."""
     import os
     import subprocess
-    import time
 
     home = tmp_path / "home"
     rovodev = home / ".rovodev"
     rovodev.mkdir(parents=True)
     (rovodev / "mcp.json").write_text("{}\n")
-    stamp = time.strftime("%Y%m%d-%H%M%S")
+    stamp = "20990101-000000"
     existing = rovodev / f"mcp.json.bak-{stamp}"
     existing.write_text("precious\n")
 
     result = subprocess.run(
         ["bash", str(REPO / "scripts" / "install-rovodev.sh")],
-        env={**os.environ, "HOME": str(home)},
+        env={**os.environ, "HOME": str(home), "SOURCERY_BACKUP_STAMP": stamp},
         capture_output=True,
         text=True,
     )
     assert result.returncode == 0, result.stderr
     assert existing.read_text() == "precious\n"
-    backups = sorted(rovodev.glob("mcp.json.bak-*"))
-    assert len(backups) >= 2
+    assert (rovodev / f"mcp.json.bak-{stamp}-2").is_file()
