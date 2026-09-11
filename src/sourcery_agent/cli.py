@@ -28,6 +28,7 @@ def usable_key(value: str | None) -> bool:
 
 
 def _load_key() -> None:
+    """Populate SOURCERY_API_KEY from the environment or the key file."""
     if usable_key(os.getenv("SOURCERY_API_KEY")):
         return
     os.environ.pop("SOURCERY_API_KEY", None)
@@ -45,6 +46,7 @@ def _load_key() -> None:
 
 
 def format_finding_row(finding: dict[str, Any]) -> str:
+    """Render one finding as a single fixed-width table row."""
     finding_id = str(finding.get("id", "?"))
     severity = str(finding.get("severity", "?"))
     issue_type = str(finding.get("issue_type", "?"))
@@ -62,6 +64,7 @@ def format_finding_row(finding: dict[str, Any]) -> str:
 
 
 def _print_findings(items: list[dict[str, Any]]) -> None:
+    """Print findings as a severity-sorted table with a header."""
     print(f"{'ID':>7}  {'SEVERITY':<8}  {'TYPE':<10}  {'STATUS':<8}  {'LOCATION':<34}  TITLE")
     ordered = sorted(items, key=lambda f: -_SEVERITY_RANK.get(f.get("severity"), -1))
     for finding in ordered:
@@ -69,6 +72,7 @@ def _print_findings(items: list[dict[str, Any]]) -> None:
 
 
 def _print_stats(stats: dict[str, Any]) -> None:
+    """Print the status and severity count summary."""
     print(
         f"total={stats.get('total_count')} active={stats.get('active_count')} "
         f"snoozed={stats.get('snoozed_count')} ignored={stats.get('ignored_count')} "
@@ -81,6 +85,7 @@ def _print_stats(stats: dict[str, Any]) -> None:
 
 
 def cmd_snapshot(args: argparse.Namespace) -> int:
+    """Counts by status/severity plus the first page of active findings."""
     client = SourceryClient()
     counts = client.issue_stats(repository_ids=args.repo_id, issue_types=args.type)
     page = client.list_issues(
@@ -99,6 +104,7 @@ def cmd_snapshot(args: argparse.Namespace) -> int:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
+    """List findings with the requested filters and pagination."""
     page = SourceryClient().list_issues(
         repository_ids=args.repo_id,
         issue_types=args.type,
@@ -117,6 +123,7 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def cmd_get(args: argparse.Namespace) -> int:
+    """Print one finding's details."""
     finding = SourceryClient().get_issue(args.id)
     if args.json:
         print(json.dumps(finding, indent=2))
@@ -147,6 +154,7 @@ def cmd_get(args: argparse.Namespace) -> int:
 
 
 def cmd_counts(args: argparse.Namespace) -> int:
+    """Print aggregate counts by status and severity."""
     stats = SourceryClient().issue_stats(repository_ids=args.repo_id, issue_types=args.type)
     if args.json:
         print(json.dumps(stats, indent=2))
@@ -156,6 +164,7 @@ def cmd_counts(args: argparse.Namespace) -> int:
 
 
 def cmd_fix_prompt(args: argparse.Namespace) -> int:
+    """Print the minimal-change fix prompt for one finding."""
     finding = SourceryClient().get_issue(args.id)
     print(build_fix_prompt(finding))
     return 0
@@ -164,6 +173,7 @@ def cmd_fix_prompt(args: argparse.Namespace) -> int:
 def _add_filters(
     parser: argparse.ArgumentParser, *, statuses: bool = False, search: bool = False, cursor: bool = False
 ) -> None:
+    """Attach the shared repository/type/status filter options."""
     parser.add_argument(
         "--repo-id", dest="repo_id", type=int, action="append", metavar="N",
         help="filter by repository id (repeatable)",
@@ -184,6 +194,7 @@ def _add_filters(
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the argparse surface for the sourcery-agent CLI."""
     parser = argparse.ArgumentParser(
         prog="sourcery-agent", description="Query Sourcery security findings from the terminal."
     )
@@ -219,6 +230,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the CLI and return the process exit code."""
     args = build_parser().parse_args(argv)
     try:
         _load_key()

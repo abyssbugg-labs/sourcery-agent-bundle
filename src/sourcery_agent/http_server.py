@@ -49,6 +49,7 @@ def check_bind_allowed(host: str) -> None:
 
 
 def main() -> None:
+    """Run the Streamable HTTP server (loopback-only unless remote mode is configured)."""
     host = os.getenv("SOURCERY_MCP_HOST", "127.0.0.1")
     port = int(os.getenv("SOURCERY_MCP_PORT", "8765"))
     path = os.getenv("SOURCERY_MCP_PATH", "/mcp")

@@ -4,6 +4,7 @@ from sourcery_agent import cli
 
 
 def test_parser_has_expected_commands():
+    """Every documented subcommand parses to a callable handler."""
     parser = cli.build_parser()
     for argv in (["snapshot"], ["list"], ["get", "1"], ["counts"], ["fix-prompt", "2"]):
         args = parser.parse_args(argv)
@@ -11,6 +12,7 @@ def test_parser_has_expected_commands():
 
 
 def test_row_formatting_handles_spec_finding():
+    """Spec-format findings render id, severity, and location."""
     row = cli.format_finding_row(
         {
             "id": 7,
@@ -27,6 +29,7 @@ def test_row_formatting_handles_spec_finding():
 
 
 def test_row_formatting_falls_back_to_package_location():
+    """Dependency findings fall back to the package as location."""
     row = cli.format_finding_row(
         {
             "id": 42,
@@ -42,6 +45,7 @@ def test_row_formatting_falls_back_to_package_location():
 
 
 def test_usable_key_rejects_placeholders():
+    """Empty, missing, and unexpanded references are not usable keys."""
     assert cli.usable_key("real-key") is True
     assert cli.usable_key("${user_config.sourcery_api_key}") is False
     assert cli.usable_key("") is False
@@ -49,6 +53,7 @@ def test_usable_key_rejects_placeholders():
 
 
 def test_main_reports_missing_key(tmp_path, monkeypatch, capsys):
+    """A missing key file exits 1 with a guidance message."""
     monkeypatch.delenv("SOURCERY_API_KEY", raising=False)
     monkeypatch.delenv("PLUGIN_DATA", raising=False)
     monkeypatch.delenv("CLAUDE_PLUGIN_DATA", raising=False)
@@ -58,6 +63,7 @@ def test_main_reports_missing_key(tmp_path, monkeypatch, capsys):
 
 
 def test_main_reports_key_file_read_errors(tmp_path, monkeypatch, capsys):
+    """Unreadable key files fail cleanly instead of raising."""
     key_file = tmp_path / "unreadable-key"
     key_file.write_text("not-used")
     key_file.chmod(0)
