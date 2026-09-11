@@ -74,14 +74,13 @@ def _render_dependency_chain(finding: dict[str, Any]) -> str | None:
         if not isinstance(node, dict) or not node.get("name"):
             raise ValueError("dependency_graph.nodes entries must be objects with a 'name' key")
         nodes[node["name"]] = node
-    if not nodes:
-        return None
-
     raw_edges = graph.get("edges", [])
     if not isinstance(raw_edges, list):
         raise ValueError("dependency_graph.edges must be a list")
     if len(raw_edges) > _GRAPH_MAX_EDGES:
         raise ValueError(f"dependency_graph.edges must contain at most {_GRAPH_MAX_EDGES} entries")
+    if not nodes:
+        return None
     children: dict[str, list[str]] = {}
     for edge in raw_edges:
         if not isinstance(edge, dict) or "from_package" not in edge or "to_package" not in edge:

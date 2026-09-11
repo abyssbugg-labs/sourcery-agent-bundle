@@ -482,6 +482,23 @@ def test_oversized_dependency_graph_rejected_before_traversal():
         build_fix_prompt(finding)
 
 
+def test_dependency_graph_edges_validated_even_without_nodes():
+    """Edge type and size are checked even when there are no nodes."""
+    finding = {
+        "issue_type": "DEPENDENCY",
+        "package_name": "orphan-edges",
+        "dependency_graph": {
+            "nodes": [],
+            "edges": [{"from_package": "a", "to_package": "b"}] * 5001,
+        },
+    }
+    with pytest.raises(ValueError):
+        build_fix_prompt(finding)
+    finding["dependency_graph"] = {"nodes": [], "edges": "not-a-list"}
+    with pytest.raises(ValueError):
+        build_fix_prompt(finding)
+
+
 def test_build_server_wires_token_verifier_only_with_token():
     """A configured token enables SDK bearer verification; empty means none."""
     from sourcery_agent import server
