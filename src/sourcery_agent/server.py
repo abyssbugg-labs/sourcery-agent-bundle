@@ -351,8 +351,8 @@ _COLLECTION_PATHS = {
     "/api/v1/security-issue-groups",
 }
 _STATS_PATHS = {
-    "/api/v1/security-issues/statistics",
-    "/api/v1/security-issue-groups/statistics",
+    "/api/v1/security-issues/stats",
+    "/api/v1/security-issue-groups/stats",
 }
 _ITEM_PATH = re.compile(
     r"^/api/v1/security-(?:issues|issue-groups)/[1-9][0-9]*$"

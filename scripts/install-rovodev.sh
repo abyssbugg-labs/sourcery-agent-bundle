@@ -54,18 +54,39 @@ if managed_file.is_file():
     owned = {line.strip() for line in managed_file.read_text().splitlines() if line.strip()}
 managed = set()
 
+
+def is_proven_legacy_link(current, skill_name):
+    """Recognize links created by this bundle before ownership manifests existed."""
+    resolved = current.resolve(strict=False)
+    if resolved.name != skill_name or resolved.parent.name != "skills":
+        return False
+    bundle_root = resolved.parent.parent
+    manifest = bundle_root / "plugin.json"
+    if not manifest.is_file() or not (resolved / "SKILL.md").is_file():
+        return False
+    try:
+        metadata = json.loads(manifest.read_text())
+    except (OSError, json.JSONDecodeError):
+        return False
+    return (
+        isinstance(metadata, dict)
+        and metadata.get("name") == "sourcery-agent-bundle"
+    )
+
+
 for skill in sorted((plugin_root / "skills").iterdir()):
     if not (skill / "SKILL.md").is_file():
         continue
     target = skills_dst / skill.name
     if target.is_symlink():
-        current = pathlib.Path(os.readlink(target))
+        raw_current = pathlib.Path(os.readlink(target))
+        current = raw_current if raw_current.is_absolute() else target.parent / raw_current
         if current.resolve() == skill.resolve():
             managed.add(target.name)
             print(f"skill {target.name}: up to date")
             continue
-        # Refresh only links recorded in this installer's ownership manifest.
-        if target.name in owned:
+        # Refresh links in the ownership manifest, plus identity-verified legacy links.
+        if target.name in owned or is_proven_legacy_link(current, target.name):
             target.unlink()
             target.symlink_to(skill)
             managed.add(target.name)

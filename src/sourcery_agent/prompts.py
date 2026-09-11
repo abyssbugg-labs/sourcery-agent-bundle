@@ -70,15 +70,17 @@ def _render_dependency_chain(finding: dict[str, Any]) -> str | None:
     if len(raw_nodes) > _GRAPH_MAX_NODES:
         raise ValueError(f"dependency_graph.nodes must contain at most {_GRAPH_MAX_NODES} entries")
     nodes: dict[str, dict[str, Any]] = {}
-    node_aliases: dict[str, str] = {}  # Maps "name@version" to "name"
+    keys_by_name: dict[str, list[str]] = {}
     for node in raw_nodes:
         if not isinstance(node, dict) or not node.get("name"):
             raise ValueError("dependency_graph.nodes entries must be objects with a 'name' key")
-        name = node["name"]
-        nodes[name] = node
-        # If node has a version, register the @version form as an alias to the bare name
-        if node.get("version"):
-            node_aliases[f"{name}@{node['version']}"] = name
+        name = str(node["name"])
+        version = node.get("version")
+        key = f"{name}@{version}" if version else name
+        if key in nodes:
+            raise ValueError(f"dependency_graph.nodes contains duplicate identifier {key!r}")
+        nodes[key] = node
+        keys_by_name.setdefault(name, []).append(key)
     raw_edges = graph.get("edges", [])
     if not isinstance(raw_edges, list):
         raise ValueError("dependency_graph.edges must be a list")
@@ -90,25 +92,31 @@ def _render_dependency_chain(finding: dict[str, Any]) -> str | None:
             raise ValueError("dependency_graph.edges entries must include 'from_package' and 'to_package'")
     if not nodes:
         return None
+    def resolve_key(reference: Any) -> str:
+        """Resolve an edge identifier without collapsing multiple package versions."""
+        candidate = str(reference)
+        if candidate in nodes:
+            return candidate
+        matching = keys_by_name.get(candidate, [])
+        return matching[0] if len(matching) == 1 else candidate
+
     children: dict[str, list[str]] = {}
     for edge in raw_edges:
-        from_pkg = edge["from_package"]
-        to_pkg = edge["to_package"]
-        # Resolve versioned IDs to bare node names using exact match first, then alias
-        from_name = from_pkg if from_pkg in nodes else node_aliases.get(from_pkg, from_pkg)
-        to_name = to_pkg if to_pkg in nodes else node_aliases.get(to_pkg, to_pkg)
-        children.setdefault(from_name, []).append(to_name)
+        from_key = resolve_key(edge["from_package"])
+        to_key = resolve_key(edge["to_package"])
+        children.setdefault(from_key, []).append(to_key)
 
-    def label(name: str) -> str:
+    def label(key: str) -> str:
         """Format one graph node as ``name@version [tags]``."""
-        node = nodes.get(name, {})
+        node = nodes.get(key, {})
+        name = str(node.get("name", key))
         version = f"@{node['version']}" if node.get("version") else ""
         tags = [tag for tag in (node.get("relationship"), "dev" if node.get("dev") else None) if tag]
         suffix = f" [{', '.join(tags)}]" if tags else ""
         return f"{name}{version}{suffix}"
 
-    vulnerable = {name for name, node in nodes.items() if node.get("vulnerable")}
-    roots = [name for name, node in nodes.items() if node.get("relationship") == "root"] or list(nodes)
+    vulnerable = {key for key, node in nodes.items() if node.get("vulnerable")}
+    roots = [key for key, node in nodes.items() if node.get("relationship") == "root"] or list(nodes)
     paths: list[str] = []
     steps = 0
 

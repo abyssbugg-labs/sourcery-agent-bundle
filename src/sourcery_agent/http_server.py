@@ -57,12 +57,14 @@ def resolve_resource_url(host: str, port: int, path: str, configured: str | None
         raise SystemExit(f"SOURCERY_MCP_PORT must be between 1 and 65535; got {port}")
     normalized_path = "/" + path.strip().strip("/")
     if configured:
-        parsed = urlparse(configured)
-        allowed_schemes = {"http", "https"} if is_loopback_host(host) else {"https"}
         try:
-            parsed.port
+            parsed = urlparse(configured)
+            _ = parsed.port
         except ValueError as exc:
-            raise SystemExit("SOURCERY_MCP_RESOURCE_URL contains an invalid port") from exc
+            raise SystemExit(
+                "SOURCERY_MCP_RESOURCE_URL contains an invalid authority"
+            ) from exc
+        allowed_schemes = {"http", "https"} if is_loopback_host(host) else {"https"}
         if (
             parsed.scheme not in allowed_schemes
             or not parsed.hostname

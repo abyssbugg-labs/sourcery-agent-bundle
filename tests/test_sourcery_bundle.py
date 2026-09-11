@@ -582,6 +582,30 @@ def test_dependency_graph_resolves_versioned_edge_identifiers():
     assert "root@1.0 [root] -> child@2.0" in prompt
 
 
+def test_dependency_graph_keeps_duplicate_package_versions_distinct():
+    """Edges resolve to the exact package version when names repeat."""
+    finding = {
+        "issue_type": "DEPENDENCY",
+        "package_name": "child",
+        "package_version": "1.0",
+        "dependency_graph": {
+            "nodes": [
+                {"name": "root", "version": "0", "relationship": "root"},
+                {"name": "child", "version": "1.0", "vulnerable": True},
+                {"name": "child", "version": "2.0", "vulnerable": True},
+            ],
+            "edges": [
+                {"from_package": "root@0", "to_package": "child@1.0"}
+            ],
+        },
+    }
+
+    prompt = build_fix_prompt(finding)
+
+    assert "root@0 [root] -> child@1.0" in prompt
+    assert "root@0 [root] -> child@2.0" not in prompt
+
+
 @pytest.mark.parametrize(
     ("method", "path", "params_json", "body_json"),
     [
@@ -645,11 +669,11 @@ def test_raw_bridge_preserves_all_verified_operations(monkeypatch):
     monkeypatch.setattr(server, "_client", _RecordingClient)
     operations = [
         ("GET", "/api/v1/security-issues", '{"limit": 5}', "null"),
-        ("GET", "/api/v1/security-issues/statistics", "{}", "null"),
+        ("GET", "/api/v1/security-issues/stats", "{}", "null"),
         ("GET", "/api/v1/security-issues/1", "{}", "null"),
         ("PATCH", "/api/v1/security-issues", "{}", '{"ids": [1], "status": "ACTIVE"}'),
         ("GET", "/api/v1/security-issue-groups", '{"limit": 5}', "null"),
-        ("GET", "/api/v1/security-issue-groups/statistics", "{}", "null"),
+        ("GET", "/api/v1/security-issue-groups/stats", "{}", "null"),
         ("GET", "/api/v1/security-issue-groups/1", "{}", "null"),
         ("PATCH", "/api/v1/security-issue-groups", "{}", '{"ids": [1], "status": "ACTIVE"}'),
     ]
@@ -691,6 +715,7 @@ def test_remote_resource_url_is_explicit_https_and_matches_mcp_path():
         "https://user@mcp.example.com/mcp",
         "https://mcp.example.com:invalid/mcp",
         "https://@/mcp",
+        "https://[::1/mcp",
     ):
         with pytest.raises(SystemExit):
             resolver("0.0.0.0", 8765, "/mcp", malformed)

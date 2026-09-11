@@ -342,6 +342,79 @@ def test_rovodev_installer_preserves_unmanifested_same_name_skill_link(tmp_path)
     assert "sourcery-triage" not in managed
 
 
+def test_rovodev_installer_adopts_proven_legacy_bundle_link(tmp_path):
+    """Pre-manifest links are refreshed only when their bundle identity is verified."""
+    import os
+    import subprocess
+
+    home = tmp_path / "home"
+    skills_dir = home / ".rovodev" / "skills"
+    skills_dir.mkdir(parents=True)
+
+    legacy_root = tmp_path / "legacy-sourcery-bundle"
+    legacy_skill = legacy_root / "skills" / "sourcery-triage"
+    legacy_skill.mkdir(parents=True)
+    (legacy_skill / "SKILL.md").write_text("legacy\n")
+    (legacy_root / "plugin.json").write_text(
+        json.dumps({"name": "sourcery-agent-bundle"})
+    )
+    link = skills_dir / "sourcery-triage"
+    link.symlink_to(legacy_skill, target_is_directory=True)
+
+    result = subprocess.run(
+        ["bash", str(REPO / "scripts" / "install-rovodev.sh"), "--skills-only"],
+        cwd=REPO,
+        env={**os.environ, "HOME": str(home)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert link.resolve() == (REPO / "skills" / "sourcery-triage").resolve()
+    managed = {
+        line.strip()
+        for line in (skills_dir / ".sourcery-agent-managed").read_text().splitlines()
+        if line.strip()
+    }
+    assert "sourcery-triage" in managed
+
+
+def test_rovodev_installer_ignores_non_object_legacy_manifest(tmp_path):
+    """Malformed bundle metadata does not crash or claim a foreign link."""
+    import os
+    import subprocess
+
+    home = tmp_path / "home"
+    skills_dir = home / ".rovodev" / "skills"
+    skills_dir.mkdir(parents=True)
+    legacy_root = tmp_path / "legacy-bundle"
+    legacy_skill = legacy_root / "skills" / "sourcery-triage"
+    legacy_skill.mkdir(parents=True)
+    (legacy_skill / "SKILL.md").write_text("foreign\n")
+    (legacy_root / "plugin.json").write_text("[]\n")
+    link = skills_dir / "sourcery-triage"
+    link.symlink_to(legacy_skill, target_is_directory=True)
+
+    result = subprocess.run(
+        ["bash", str(REPO / "scripts" / "install-rovodev.sh"), "--skills-only"],
+        cwd=REPO,
+        env={**os.environ, "HOME": str(home)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert link.resolve() == legacy_skill.resolve()
+    managed = {
+        line.strip()
+        for line in (skills_dir / ".sourcery-agent-managed").read_text().splitlines()
+        if line.strip()
+    }
+    assert "sourcery-triage" not in managed
+
+
 def test_bootstrap_quarantines_stale_lock_before_deleting_it():
     """Stale lock reclamation never deletes the shared lock path in place."""
     bootstrap = (REPO / "bin" / "_bootstrap").read_text()
