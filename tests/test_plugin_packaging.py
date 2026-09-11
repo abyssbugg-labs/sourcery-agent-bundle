@@ -30,10 +30,12 @@ NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$")
 
 
 def _load(path: Path) -> dict:
+    """Load a JSON file as a dictionary."""
     return json.loads(path.read_text())
 
 
 def test_core_manifest_follows_agent_plugins_rules():
+    """plugin.json stays inside the closed Agent Plugins core schema."""
     manifest = _load(REPO / "plugin.json")
     assert manifest["$schema"] == AGP_PLUGIN_SCHEMA
     assert set(manifest) <= CORE_MANIFEST_FIELDS
@@ -44,6 +46,7 @@ def test_core_manifest_follows_agent_plugins_rules():
 
 
 def test_portable_mcp_config_is_valid_stdio():
+    """mcp.json declares a valid plugin-relative stdio server."""
     config = _load(REPO / "mcp.json")
     assert config["$schema"] == AGP_MCP_SCHEMA
     assert set(config) == {"$schema", "mcpServers"}
@@ -57,6 +60,7 @@ def test_portable_mcp_config_is_valid_stdio():
 
 
 def test_claude_adapter_is_wired():
+    """Claude manifest and .mcp.json agree on the key wiring."""
     manifest = _load(REPO / ".claude-plugin" / "plugin.json")
     assert manifest["name"] == "sourcery-agent"
     user_config = manifest["userConfig"]
@@ -70,6 +74,7 @@ def test_claude_adapter_is_wired():
 
 
 def test_skills_follow_agent_skills_layout():
+    """Each skill folder has frontmatter whose name matches the folder."""
     skill_files = sorted((REPO / "skills").glob("*/SKILL.md"))
     assert len(skill_files) >= 2
     for skill_md in skill_files:
@@ -81,6 +86,7 @@ def test_skills_follow_agent_skills_layout():
 
 
 def test_launchers_and_installer_are_executable():
+    """Launcher and installer scripts carry the executable bit."""
     for relative in ("bin/_bootstrap", "bin/run-server", "bin/run-http", "scripts/install-rovodev.sh"):
         path = REPO / relative
         assert path.is_file(), relative
@@ -88,6 +94,7 @@ def test_launchers_and_installer_are_executable():
 
 
 def test_codex_marketplace_entry_points_at_repo_root():
+    """The Codex marketplace entry points at the repo root with policy metadata."""
     marketplace = _load(REPO / ".agents" / "plugins" / "marketplace.json")
     assert marketplace["name"]
     entry = marketplace["plugins"][0]
@@ -98,12 +105,14 @@ def test_codex_marketplace_entry_points_at_repo_root():
 
 
 def test_local_hosts_installer_is_executable():
+    """install-local-hosts.sh is present and executable."""
     path = REPO / "scripts" / "install-local-hosts.sh"
     assert path.is_file()
     assert path.stat().st_mode & 0o111, "install-local-hosts.sh is not executable"
 
 
 def test_compatibility_docs_cover_all_hosts():
+    """COMPATIBILITY.md mentions every supported host."""
     text = (REPO / "docs" / "COMPATIBILITY.md").read_text()
     for host in (
         "Claude Code",
@@ -122,6 +131,7 @@ def test_compatibility_docs_cover_all_hosts():
 
 
 def test_cli_and_prewarm_launchers_are_executable():
+    """The CLI and prewarm shims are present and executable."""
     for relative in ("bin/sourcery-agent", "bin/prewarm"):
         path = REPO / relative
         assert path.is_file(), relative
@@ -129,6 +139,7 @@ def test_cli_and_prewarm_launchers_are_executable():
 
 
 def test_subagent_has_valid_frontmatter():
+    """The triager subagent declares name and description frontmatter."""
     text = (REPO / "agents" / "sourcery-triager.md").read_text()
     assert text.startswith("---\n")
     front_matter = text.split("---", 2)[1]
@@ -137,11 +148,13 @@ def test_subagent_has_valid_frontmatter():
 
 
 def test_hooks_example_is_valid_json():
+    """The hooks example parses and declares SessionStart."""
     data = _load(REPO / "examples" / "hooks" / "claude-hooks.json")
     assert "SessionStart" in data["hooks"]
 
 
 def test_enabled_hooks_wire_to_prewarm():
+    """The enabled hook invokes bin/prewarm on SessionStart."""
     data = _load(REPO / "hooks" / "hooks.json")
     commands = [
         hook["command"]
@@ -152,6 +165,7 @@ def test_enabled_hooks_wire_to_prewarm():
 
 
 def test_shell_scripts_parse_cleanly():
+    """All shipped shell scripts pass ``bash -n``."""
     import subprocess
 
     scripts = [
@@ -164,6 +178,7 @@ def test_shell_scripts_parse_cleanly():
 
 
 def test_rovodev_installer_refreshes_stale_skill_symlink(tmp_path):
+    """A moved repository refreshes its recorded skill links."""
     import os
     import subprocess
 
@@ -191,6 +206,7 @@ def test_rovodev_installer_refreshes_stale_skill_symlink(tmp_path):
 
 
 def test_rovodev_installer_preserves_unmanaged_symlinks(tmp_path):
+    """User-made skill symlinks are left untouched."""
     import os
     import subprocess
 
@@ -213,6 +229,7 @@ def test_rovodev_installer_preserves_unmanaged_symlinks(tmp_path):
 
 
 def test_version_is_consistent_across_manifests():
+    """pyproject and both plugin manifests declare a single version."""
     import tomllib
 
     versions = {

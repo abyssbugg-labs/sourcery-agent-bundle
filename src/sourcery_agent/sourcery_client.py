@@ -46,10 +46,12 @@ def ensure_allowed(method: str, path: str) -> None:
 
 
 def _without_none(mapping: dict[str, Any]) -> dict[str, Any]:
+    """Drop ``None`` values so unset filters are omitted from requests."""
     return {key: value for key, value in mapping.items() if value is not None}
 
 
 def _checked_ids(ids: list[int]) -> list[int]:
+    """Validate bulk-update ids (non-empty, at most 100)."""
     if not ids:
         raise ValueError("ids must contain at least one id")
     if len(ids) > BULK_UPDATE_MAX_IDS:
@@ -58,6 +60,7 @@ def _checked_ids(ids: list[int]) -> list[int]:
 
 
 def _checked_limit(limit: int | None) -> int | None:
+    """Validate a page size against the API's 1..100 bound."""
     if limit is None:
         return None
     if not 1 <= limit <= LIST_MAX_LIMIT:
@@ -71,6 +74,7 @@ def _validate_bulk_update(
     snoozed_until: str | None,
     severity_override: str | None,
 ) -> None:
+    """Reject no-op updates and snooze values without SNOOZED."""
     if status is None and severity_override is None:
         raise ValueError(
             "bulk update requires status and/or severity_override; refusing to send a no-op PATCH"
@@ -81,6 +85,7 @@ def _validate_bulk_update(
 
 class SourceryClient:
     def __init__(self, api_key: str | None = None, base_url: str | None = None) -> None:
+        """Resolve the API key and base URL (https only); raise without a key."""
         self.api_key = api_key or os.getenv("SOURCERY_API_KEY")
         if not self.api_key:
             raise SourceryError("SOURCERY_API_KEY is not configured")
@@ -97,6 +102,7 @@ class SourceryClient:
         params: dict[str, Any] | None = None,
         json: Any = None,
     ) -> Any:
+        """Perform one allow-listed API request and return the decoded JSON."""
         method = method.upper().strip()
         ensure_allowed(method, path)
 
@@ -143,6 +149,7 @@ class SourceryClient:
         cursor: str | None = None,
         limit: int | None = None,
     ) -> Any:
+        """GET the security-issues page matching the given filters."""
         params = _without_none(
             {
                 "repository_ids": repository_ids,
@@ -156,6 +163,7 @@ class SourceryClient:
         return self.request(method="GET", path="/api/v1/security-issues", params=params)
 
     def get_issue(self, issue_id: int) -> Any:
+        """GET one security issue by id."""
         return self.request(method="GET", path=f"/api/v1/security-issues/{int(issue_id)}")
 
     def issue_stats(
@@ -164,6 +172,7 @@ class SourceryClient:
         repository_ids: list[int] | None = None,
         issue_types: list[str] | None = None,
     ) -> Any:
+        """GET aggregate issue counts by status and severity."""
         params = _without_none({"repository_ids": repository_ids, "issue_types": issue_types})
         return self.request(method="GET", path="/api/v1/security-issues/stats", params=params)
 
@@ -176,6 +185,7 @@ class SourceryClient:
         severity_override: str | None = None,
         reason: str | None = None,
     ) -> Any:
+        """PATCH a status/severity change onto up to 100 issues."""
         _validate_bulk_update(status=status, snoozed_until=snoozed_until, severity_override=severity_override)
         body = _without_none(
             {
@@ -200,6 +210,7 @@ class SourceryClient:
         cursor: str | None = None,
         limit: int | None = None,
     ) -> Any:
+        """GET the security-issue-groups page matching the given filters."""
         params = _without_none(
             {
                 "repository_ids": repository_ids,
@@ -213,6 +224,7 @@ class SourceryClient:
         return self.request(method="GET", path="/api/v1/security-issue-groups", params=params)
 
     def get_group(self, group_id: int) -> Any:
+        """GET one issue group (with its issues) by id."""
         return self.request(method="GET", path=f"/api/v1/security-issue-groups/{int(group_id)}")
 
     def group_stats(
@@ -221,6 +233,7 @@ class SourceryClient:
         repository_ids: list[int] | None = None,
         issue_types: list[str] | None = None,
     ) -> Any:
+        """GET aggregate group counts by status and severity."""
         params = _without_none({"repository_ids": repository_ids, "issue_types": issue_types})
         return self.request(method="GET", path="/api/v1/security-issue-groups/stats", params=params)
 
@@ -233,6 +246,7 @@ class SourceryClient:
         severity_override: str | None = None,
         reason: str | None = None,
     ) -> Any:
+        """PATCH a status/severity change onto up to 100 groups."""
         _validate_bulk_update(status=status, snoozed_until=snoozed_until, severity_override=severity_override)
         body = _without_none(
             {

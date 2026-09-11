@@ -18,6 +18,7 @@ _GRAPH_MAX_STEPS = 20000
 
 
 def _render_location(finding: dict[str, Any]) -> str | None:
+    """Render ``path:start-end`` for the finding's primary location, if any."""
     file_path = finding.get("file_path")
     if not file_path:
         return None
@@ -31,6 +32,7 @@ def _render_location(finding: dict[str, Any]) -> str | None:
 
 
 def _render_source_snippet(finding: dict[str, Any]) -> str | None:
+    """Render the finding's code snippet in a fenced block, if present."""
     source_code = finding.get("source_code")
     if not source_code:
         return None
@@ -40,6 +42,7 @@ def _render_source_snippet(finding: dict[str, Any]) -> str | None:
 
 
 def _render_dependency_chain(finding: dict[str, Any]) -> str | None:
+    """Render root-to-vulnerable dependency paths from ``dependency_graph``."""
     graph = finding.get("dependency_graph")
     if not isinstance(graph, dict):
         return None
@@ -64,6 +67,7 @@ def _render_dependency_chain(finding: dict[str, Any]) -> str | None:
         children.setdefault(edge["from_package"], []).append(edge["to_package"])
 
     def label(name: str) -> str:
+        """Format one graph node as ``name@version [tags]``."""
         node = nodes.get(name, {})
         version = f"@{node['version']}" if node.get("version") else ""
         tags = [tag for tag in (node.get("relationship"), "dev" if node.get("dev") else None) if tag]
@@ -76,6 +80,7 @@ def _render_dependency_chain(finding: dict[str, Any]) -> str | None:
     steps = 0
 
     def walk(name: str, trail: list[str]) -> None:
+        """Collect paths from ``name`` to the nearest vulnerable nodes."""
         nonlocal steps
         steps += 1
         if steps > _GRAPH_MAX_STEPS or len(paths) >= _GRAPH_MAX_PATHS or len(trail) > _GRAPH_MAX_DEPTH:
@@ -99,6 +104,7 @@ def _render_dependency_chain(finding: dict[str, Any]) -> str | None:
 
 
 def _render_fix(finding: dict[str, Any]) -> str:
+    """Render the remediation instruction for the finding's issue type."""
     explicit = finding.get("recommended_fix") or finding.get("fix")
     if explicit:
         return str(explicit)
@@ -145,6 +151,7 @@ def _render_fix(finding: dict[str, Any]) -> str:
 
 
 def build_fix_prompt(finding: dict[str, Any]) -> str:
+    """Build the minimal-change agent prompt from a finding object."""
     title = str(finding.get("title", "")).strip()
     description = finding.get("description") or finding.get("risk") or ""
     cause = finding.get("cause") or ""

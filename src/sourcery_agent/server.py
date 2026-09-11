@@ -31,10 +31,12 @@ mcp = MCPServer(
 
 
 def _client() -> SourceryClient:
+    """Build a client from the ambient configuration."""
     return SourceryClient()
 
 
 def _check_subset(values: list[str] | None, allowed: tuple[str, ...], field: str) -> list[str] | None:
+    """Validate that every value belongs to ``allowed``."""
     if values is None:
         return None
     bad = [value for value in values if value not in allowed]
@@ -44,6 +46,7 @@ def _check_subset(values: list[str] | None, allowed: tuple[str, ...], field: str
 
 
 def _check_status(status: str | None) -> str | None:
+    """Validate a caller-provided status against the PATCH inputs."""
     if status is not None and status not in constants.STATUS_INPUTS:
         raise ValueError(
             f"status must be one of {constants.STATUS_INPUTS} "
@@ -53,12 +56,14 @@ def _check_status(status: str | None) -> str | None:
 
 
 def _check_severity(severity: str | None) -> str | None:
+    """Validate a severity override against the known severities."""
     if severity is not None and severity not in constants.SEVERITIES:
         raise ValueError(f"severity_override must be one of {constants.SEVERITIES}")
     return severity
 
 
 def _check_limit(limit: int) -> int:
+    """Validate a page size against the API's 1..100 bound."""
     if not 1 <= limit <= constants.LIST_MAX_LIMIT:
         raise ValueError(f"limit must be between 1 and {constants.LIST_MAX_LIMIT}; got {limit}")
     return limit
@@ -274,6 +279,7 @@ def sourcery_api_request(
 
 
 def main() -> None:
+    """Run the MCP server over stdio."""
     mcp.run()
 
 

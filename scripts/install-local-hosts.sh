@@ -124,6 +124,7 @@ repo = sys.argv[1]
 
 
 def _vscode_settings():
+    """Resolve the platform's VS Code user settings.json path, if it exists."""
     override = os.environ.get("VSCODE_USER_DIR")
     if override:
         candidates = [pathlib.Path(override)]
@@ -150,6 +151,7 @@ if settings is None:
 
 
 def strip_jsonc(text: str) -> str:
+    """Strip ``//`` and ``/* */`` comments and trailing commas from JSONC text."""
     out, i, n, in_str, esc = [], 0, len(text), False, False
     while i < n:
         ch = text[i]
