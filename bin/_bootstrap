@@ -51,6 +51,10 @@ if [ ! -x "$VENV_DIR/bin/python" ]; then
   NEED_INSTALL=1
 elif [ ! -f "$STAMP" ]; then
   NEED_INSTALL=1
+elif [ "$(head -n 1 "$STAMP" 2>/dev/null)" != "$PLUGIN_ROOT" ]; then
+  # The stamp records which plugin root the editable install came from; a
+  # moved/renamed plugin (even with preserved mtimes) must be reinstalled.
+  NEED_INSTALL=1
 elif [ -n "$(find "$PLUGIN_ROOT/pyproject.toml" "$PLUGIN_ROOT/src" -newer "$STAMP" -print -quit 2>/dev/null)" ]; then
   NEED_INSTALL=1
 fi
@@ -62,7 +66,7 @@ if [ "$NEED_INSTALL" -eq 1 ]; then
   fi
   echo "sourcery-agent: installing plugin package (first run or update)" >&2
   "$VENV_DIR/bin/pip" install --quiet --upgrade --disable-pip-version-check -e "$PLUGIN_ROOT" >&2
-  touch "$STAMP"
+  printf '%s\n' "$PLUGIN_ROOT" > "$STAMP"
 fi
 
 VENV_PY="$VENV_DIR/bin/python"

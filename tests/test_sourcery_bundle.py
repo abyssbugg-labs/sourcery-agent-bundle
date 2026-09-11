@@ -132,3 +132,117 @@ def test_legacy_ui_keys_still_render():
     assert "Reflected XSS." in prompt
     assert "Escape the output." in prompt
     assert "Stops XSS." in prompt
+
+
+LICENSE_FINDING = {
+    "id": 99,
+    "issue_type": "LICENSE",
+    "rule_id": "license-policy/GPL",
+    "title": "GPL-3.0-only dependency detected",
+    "description": "copyleft-utils is GPL-3.0-only, outside the allowed license policy.",
+    "file_path": "requirements.lock",
+    "package_name": "copyleft-utils",
+    "package_version": "2.4.0",
+    "package_type": "pypi",
+    "package_licenses": ["GPL-3.0-only"],
+    "fixed_versions": ["3.1.0"],
+    "manifest_file_path": "requirements.txt",
+    "severity": "MEDIUM",
+    "status": "ACTIVE",
+}
+
+
+def test_license_prompt_guides_replacement_not_upgrade():
+    prompt = build_fix_prompt(LICENSE_FINDING)
+    fix_section = prompt.split("<fix>", 1)[1].split("</fix>", 1)[0]
+    assert "copyleft-utils" in fix_section
+    assert "GPL-3.0-only" in prompt
+    assert "3.1.0" not in fix_section
+    assert "upgrade" not in fix_section.lower()
+    assert "replace" in fix_section.lower() or "remove" in fix_section.lower()
+
+
+def test_license_prompt_skips_fixed_versions_in_package_section():
+    prompt = build_fix_prompt(LICENSE_FINDING)
+    package_section = prompt.split("<package>", 1)[1].split("</package>", 1)[0]
+    assert "fixed versions" not in package_section
+    assert "licenses: GPL-3.0-only" in package_section
+
+
+class _NetworkBoom:
+    """Fails loudly if a test reaches the network layer."""
+
+    def __init__(self, *args, **kwargs):
+        raise AssertionError("network access attempted before local validation")
+
+
+def test_client_rejects_out_of_range_limits_before_network(monkeypatch):
+    monkeypatch.setenv("SOURCERY_API_KEY", "test-key")
+    monkeypatch.setattr("sourcery_agent.sourcery_client.httpx.Client", _NetworkBoom)
+    client = SourceryClient()
+    for limit in (0, 101):
+        with pytest.raises(ValueError):
+            client.list_issues(limit=limit)
+    with pytest.raises(ValueError):
+        client.list_groups(limit=101)
+
+
+def test_server_limit_checks_upper_bound():
+    from sourcery_agent.server import _check_limit
+
+    assert _check_limit(100) == 100
+    with pytest.raises(ValueError):
+        _check_limit(101)
+
+
+def test_bulk_update_requires_a_change_before_network(monkeypatch):
+    monkeypatch.setenv("SOURCERY_API_KEY", "test-key")
+    monkeypatch.setattr("sourcery_agent.sourcery_client.httpx.Client", _NetworkBoom)
+    client = SourceryClient()
+    with pytest.raises(ValueError):
+        client.bulk_update_issues(ids=[1])
+    with pytest.raises(ValueError):
+        client.bulk_update_issues(ids=[1], snoozed_until="2030-01-01T00:00:00Z")
+    with pytest.raises(ValueError):
+        client.bulk_update_issues(ids=[1], status="ACTIVE", snoozed_until="2030-01-01T00:00:00Z")
+    with pytest.raises(ValueError):
+        client.bulk_update_groups(ids=[1])
+
+
+def test_http_server_refuses_public_bind_without_optin(monkeypatch):
+    from sourcery_agent import http_server
+
+    monkeypatch.delenv("SOURCERY_MCP_ALLOW_REMOTE", raising=False)
+    monkeypatch.delenv("SOURCERY_MCP_AUTH_TOKEN", raising=False)
+    for host in ("0.0.0.0", "192.168.1.20"):
+        with pytest.raises(SystemExit):
+            http_server.check_bind_allowed(host)
+
+
+def test_http_server_remote_bind_requires_token(monkeypatch):
+    from sourcery_agent import http_server
+
+    monkeypatch.setenv("SOURCERY_MCP_ALLOW_REMOTE", "1")
+    monkeypatch.delenv("SOURCERY_MCP_AUTH_TOKEN", raising=False)
+    with pytest.raises(SystemExit):
+        http_server.check_bind_allowed("0.0.0.0")
+    monkeypatch.setenv("SOURCERY_MCP_AUTH_TOKEN", "s3cret")
+    http_server.check_bind_allowed("0.0.0.0")
+
+
+def test_http_server_loopback_detection():
+    from sourcery_agent.http_server import is_loopback_host
+
+    assert is_loopback_host("127.0.0.1")
+    assert is_loopback_host("::1")
+    assert is_loopback_host("localhost")
+    assert not is_loopback_host("0.0.0.0")
+    assert not is_loopback_host("10.0.0.5")
+
+
+def test_server_imports_the_pinned_mcp_sdk_class():
+    from mcp.server.mcpserver import MCPServer
+
+    from sourcery_agent import server
+
+    assert isinstance(server.mcp, MCPServer)

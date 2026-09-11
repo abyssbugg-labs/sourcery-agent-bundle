@@ -78,7 +78,7 @@ SOURCERY_API_KEY=... bin/run-http        # Streamable HTTP, default 127.0.0.1:87
 3. **chatgpt.com/plugins** → **+** → create a developer-mode app with your MCP URL (streaming HTTP is supported).
 4. Tools appear under **Developer mode** in the composer; write actions require confirmation.
 
-Security: `bin/run-http` binds loopback by default. Do not expose a keyed endpoint publicly without TLS and access control. Public-directory submission additionally requires a public HTTPS endpoint and OAuth when the server access private data. `examples/mcp.http.json` is a template for the remote variant.
+Security: `bin/run-http` binds loopback by default and **refuses non-loopback hosts** unless both `SOURCERY_MCP_ALLOW_REMOTE=1` and a non-empty `SOURCERY_MCP_AUTH_TOKEN` are set; the transport itself does not terminate request auth, so a fronting proxy must require that bearer token. Public-directory submission additionally requires a public HTTPS endpoint and OAuth when the server accesses private data. `examples/mcp.http.json` is a template for the remote variant.
 
 ## Rovo Dev CLI (`acli rovodev`)
 
@@ -90,11 +90,11 @@ The script backs up and updates `~/.rovodev/mcp.json` with a `sourcery` server e
 
 ## VS Code (GitHub Copilot)
 
-VS Code loads the portable core natively (Agent Plugins 1.0). The installer registers it via `chat.pluginLocations` — reload the window, then check the Agent Plugins view (search `@agentPlugins` in the Extensions view). Alternatives: **Chat: Install Plugin From Source** with a Git URL once this repo is pushed, or add the repo to `chat.plugins.marketplaces`.
+VS Code loads the portable core natively (Agent Plugins 1.0). The installer registers it via `chat.pluginLocations` — it resolves the platform settings path (macOS/Linux/Windows, or set `VSCODE_USER_DIR` to override) and backs the file up before editing. Reload the window, then check the Agent Plugins view (search `@agentPlugins` in the Extensions view). Alternatives: **Chat: Install Plugin From Source** with a Git URL once this repo is pushed, or add the repo to `chat.plugins.marketplaces`.
 
 ## Devin
 
-- Skills: linked into `~/.config/devin/skills` and `~/.devin/skills` by the installer (same `SKILL.md` format).
+- Skills: linked into `~/.config/devin/skills` and `~/.devin/skills` by the installer (created as needed; same `SKILL.md` format).
 - Full plugin (CLI): `devin plugins install --local "<repo>"` — Claude-format plugins are honored (`.mcp.json` + `${CLAUDE_PLUGIN_ROOT}` supported). `--local` keeps it off your Devin Cloud personal plugins.
 - Direct MCP: `devin mcp add sourcery --command "<repo>/bin/run-server"`.
 

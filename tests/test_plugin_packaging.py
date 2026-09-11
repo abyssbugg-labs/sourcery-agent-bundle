@@ -149,3 +149,38 @@ def test_enabled_hooks_wire_to_prewarm():
         for hook in entry["hooks"]
     ]
     assert any("bin/prewarm" in command for command in commands)
+
+
+def test_shell_scripts_parse_cleanly():
+    import subprocess
+
+    scripts = [
+        REPO / "bin" / name
+        for name in ("_bootstrap", "run-server", "run-http", "sourcery-agent", "prewarm")
+    ] + sorted((REPO / "scripts").glob("*.sh"))
+    for script in scripts:
+        result = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True)
+        assert result.returncode == 0, f"{script.name}: {result.stderr}"
+
+
+def test_rovodev_installer_refreshes_stale_skill_symlink(tmp_path):
+    import os
+    import subprocess
+
+    home = tmp_path / "home"
+    skills_dir = home / ".rovodev" / "skills"
+    skills_dir.mkdir(parents=True)
+    stale = skills_dir / "sourcery-triage"
+    stale.symlink_to("/nonexistent/old/location/skills/sourcery-triage")
+
+    result = subprocess.run(
+        ["bash", str(REPO / "scripts" / "install-rovodev.sh")],
+        env={**os.environ, "HOME": str(home)},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+    expected = REPO / "skills" / "sourcery-triage"
+    assert stale.is_symlink()
+    assert stale.resolve() == expected.resolve()

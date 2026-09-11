@@ -79,7 +79,21 @@ def _render_fix(finding: dict[str, Any]) -> str:
         return str(explicit)
 
     issue_type = finding.get("issue_type")
-    if issue_type in {"DEPENDENCY", "LICENSE"}:
+    if issue_type == "LICENSE":
+        package = finding.get("package_name") or "the flagged package"
+        version = f" from {finding['package_version']}" if finding.get("package_version") else ""
+        licenses = finding.get("package_licenses") or []
+        terms = ", ".join(str(v) for v in licenses) if licenses else "the detected license terms"
+        guidance = (
+            f"`{package}`{version} ships under {terms}, which this repository's license policy "
+            "does not allow. Replace it with a compatible alternative or remove the dependency; "
+            "if the usage is intentional, route the finding for license-policy review instead."
+        )
+        manifest = finding.get("manifest_file_path") or finding.get("file_path")
+        target = f" Edit the manifest `{manifest}`." if manifest else ""
+        return guidance + target
+
+    if issue_type == "DEPENDENCY":
         package = finding.get("package_name") or "the flagged package"
         version = f" from {finding['package_version']}" if finding.get("package_version") else ""
         fixed = finding.get("fixed_versions") or []
@@ -144,7 +158,7 @@ def build_fix_prompt(finding: dict[str, Any]) -> str:
         if finding.get("package_type"):
             name += f" ({finding['package_type']})"
         package_lines.append(name)
-    if finding.get("fixed_versions"):
+    if finding.get("fixed_versions") and finding.get("issue_type") != "LICENSE":
         package_lines.append("fixed versions: " + ", ".join(str(v) for v in finding["fixed_versions"]))
     if finding.get("package_licenses"):
         package_lines.append("licenses: " + ", ".join(str(v) for v in finding["package_licenses"]))

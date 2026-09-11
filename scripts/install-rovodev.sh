@@ -12,6 +12,7 @@ PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 python3 - "$PLUGIN_ROOT" <<'PY'
 import json
+import os
 import pathlib
 import shutil
 import sys
@@ -45,8 +46,17 @@ for skill in sorted((plugin_root / "skills").iterdir()):
     if not (skill / "SKILL.md").is_file():
         continue
     target = skills_dst / skill.name
-    if target.exists() or target.is_symlink():
-        print(f"skill {target.name}: already present, leaving as-is")
+    if target.is_symlink():
+        current = pathlib.Path(os.readlink(target))
+        if current.resolve() == skill.resolve():
+            print(f"skill {target.name}: up to date")
+            continue
+        target.unlink()
+        target.symlink_to(skill)
+        print(f"skill {target.name}: stale symlink refreshed -> {skill}")
+        continue
+    if target.exists():
+        print(f"skill {target.name}: real directory present, leaving as-is")
         continue
     target.symlink_to(skill)
     print(f"skill linked: {target}")

@@ -59,8 +59,8 @@ def _check_severity(severity: str | None) -> str | None:
 
 
 def _check_limit(limit: int) -> int:
-    if limit < 1:
-        raise ValueError("limit must be >= 1")
+    if not 1 <= limit <= constants.LIST_MAX_LIMIT:
+        raise ValueError(f"limit must be between 1 and {constants.LIST_MAX_LIMIT}; got {limit}")
     return limit
 
 

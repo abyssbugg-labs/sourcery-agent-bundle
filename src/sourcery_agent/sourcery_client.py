@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx
 
-from .constants import API_BASE, BULK_UPDATE_MAX_IDS
+from .constants import API_BASE, BULK_UPDATE_MAX_IDS, LIST_MAX_LIMIT
 
 _EXACT_OPERATIONS: frozenset[tuple[str, str]] = frozenset(
     {
@@ -55,6 +55,28 @@ def _checked_ids(ids: list[int]) -> list[int]:
     if len(ids) > BULK_UPDATE_MAX_IDS:
         raise ValueError(f"ids must contain at most {BULK_UPDATE_MAX_IDS} ids; got {len(ids)}")
     return [int(value) for value in ids]
+
+
+def _checked_limit(limit: int | None) -> int | None:
+    if limit is None:
+        return None
+    if not 1 <= limit <= LIST_MAX_LIMIT:
+        raise ValueError(f"limit must be between 1 and {LIST_MAX_LIMIT}; got {limit}")
+    return limit
+
+
+def _validate_bulk_update(
+    *,
+    status: str | None,
+    snoozed_until: str | None,
+    severity_override: str | None,
+) -> None:
+    if status is None and severity_override is None:
+        raise ValueError(
+            "bulk update requires status and/or severity_override; refusing to send a no-op PATCH"
+        )
+    if snoozed_until is not None and status != "SNOOZED":
+        raise ValueError("snoozed_until is only valid with status='SNOOZED'")
 
 
 class SourceryClient:
@@ -125,7 +147,7 @@ class SourceryClient:
                 "statuses": statuses,
                 "search": search,
                 "cursor": cursor,
-                "limit": limit,
+                "limit": _checked_limit(limit),
             }
         )
         return self.request(method="GET", path="/api/v1/security-issues", params=params)
@@ -151,6 +173,7 @@ class SourceryClient:
         severity_override: str | None = None,
         reason: str | None = None,
     ) -> Any:
+        _validate_bulk_update(status=status, snoozed_until=snoozed_until, severity_override=severity_override)
         body = _without_none(
             {
                 "ids": _checked_ids(ids),
@@ -181,7 +204,7 @@ class SourceryClient:
                 "statuses": statuses,
                 "search": search,
                 "cursor": cursor,
-                "limit": limit,
+                "limit": _checked_limit(limit),
             }
         )
         return self.request(method="GET", path="/api/v1/security-issue-groups", params=params)
@@ -207,6 +230,7 @@ class SourceryClient:
         severity_override: str | None = None,
         reason: str | None = None,
     ) -> Any:
+        _validate_bulk_update(status=status, snoozed_until=snoozed_until, severity_override=severity_override)
         body = _without_none(
             {
                 "ids": _checked_ids(ids),
