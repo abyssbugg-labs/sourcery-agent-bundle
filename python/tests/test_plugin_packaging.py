@@ -8,7 +8,7 @@ import json
 import re
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[2]
 
 AGP_PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
 AGP_MCP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
@@ -249,7 +249,7 @@ def test_version_is_consistent_across_manifests():
     import tomllib
 
     versions = {
-        tomllib.loads((REPO / "pyproject.toml").read_text())["project"]["version"],
+        tomllib.loads((REPO / "python" / "pyproject.toml").read_text())["project"]["version"],
         _load(REPO / "plugin.json")["version"],
         _load(REPO / ".claude-plugin" / "plugin.json")["version"],
     }
