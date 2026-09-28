@@ -13,7 +13,9 @@
 set -euo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUN_SERVER="$PLUGIN_ROOT/bin/run-server"
+# The MCP servers are registered against the published npm package; the
+# npx-spawned process inherits SOURCERY_API_KEY from the launching environment.
+NPM_SPEC="@abyssbugg/sourcery@latest"
 
 echo "plugin root: $PLUGIN_ROOT"
 
@@ -38,7 +40,7 @@ if command -v grok >/dev/null 2>&1; then
   if grok mcp list 2>/dev/null | grep -q "sourcery"; then
     echo "grok: sourcery MCP server already configured"
   else
-    grok mcp add sourcery --scope user -- "$RUN_SERVER" >/dev/null && echo "grok: added sourcery MCP server (user scope)"
+    grok mcp add sourcery --scope user -- npx -y "$NPM_SPEC" >/dev/null && echo "grok: added sourcery MCP server (user scope)"
   fi
   link_skills "$HOME/.grok/skills"
   echo "grok: skills linked into ~/.grok/skills/"
@@ -51,7 +53,7 @@ if command -v amp >/dev/null 2>&1; then
   if amp mcp list 2>/dev/null | grep -q "sourcery"; then
     echo "amp: sourcery MCP server already configured"
   else
-    amp mcp add sourcery -- "$RUN_SERVER" >/dev/null && echo "amp: added sourcery MCP server (global settings)"
+    amp mcp add sourcery -- npx -y "$NPM_SPEC" >/dev/null && echo "amp: added sourcery MCP server (global settings)"
   fi
   for skill in "$PLUGIN_ROOT"/skills/*/; do
     name="$(basename "$skill")"
@@ -68,7 +70,7 @@ if command -v hermes >/dev/null 2>&1; then
   if hermes mcp list 2>/dev/null | grep -qi "sourcery"; then
     echo "hermes: sourcery MCP server already configured"
   else
-    hermes mcp add sourcery --command "$RUN_SERVER" </dev/null >/dev/null && echo "hermes: added sourcery MCP server"
+    hermes mcp add sourcery --command npx --args -y "$NPM_SPEC" </dev/null >/dev/null && echo "hermes: added sourcery MCP server"
   fi
   link_skills "$HOME/.hermes/skills"
   echo "hermes: skills linked into ~/.hermes/skills/"

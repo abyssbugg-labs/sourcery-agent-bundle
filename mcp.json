@@ -3,7 +3,7 @@
   "mcpServers": {
     "sourcery": {
       "type": "stdio",
-      "command": "./bin/run-server"
+      "command": "./bin/sourcery"
     }
   }
 }

@@ -1,15 +1,16 @@
-# Hooks example (an enabled copy lives at `hooks/hooks.json`)
+# Hooks example (not enabled)
 
-This folder keeps the source example and rationale. An enabled copy ships at
-`hooks/hooks.json`, so Claude Code runs the `SessionStart` prewarm from the repo
-as-is. To disable: delete `hooks/hooks.json` (this example stays here).
+This folder keeps a source example and rationale. Nothing ships enabled: the
+old `hooks/hooks.json` SessionStart prewarm (which warmed the Python venv) was
+removed when the server moved to the published npm package — `npx` fetches and
+caches `@abyssbugg/sourcery` on first run with no warm-up hook needed.
 
 ## What the example does
 
-`SessionStart` → `bin/prewarm`: creates the plugin venv and installs dependencies
-up front, so the first Sourcery tool call in a session is fast. Later sessions
-are already warm and nearly instant. Trade-off: on very first use, session start
-blocks for ~10–40 seconds while installing.
+`SessionStart` → an `echo` hint on stderr, reminding you to pull a
+`sourcery snapshot` when a session starts. It performs no work and is safe to
+copy into `hooks/hooks.json` (Claude format) as a starting point for your own
+hooks.
 
 ## What it deliberately does *not* do
 

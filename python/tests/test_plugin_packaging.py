@@ -87,7 +87,8 @@ def test_claude_adapter_is_wired():
 
     claude_mcp = _load(REPO / ".mcp.json")
     server = claude_mcp["mcpServers"]["sourcery"]
-    assert server["command"] == "${CLAUDE_PLUGIN_ROOT}/bin/run-server"
+    assert server["command"] == "npx"
+    assert server["args"] == ["-y", "@abyssbugg/sourcery@latest"]
     assert server["env"]["SOURCERY_API_KEY"] == "${user_config.sourcery_api_key}"
 
 
@@ -104,7 +105,7 @@ def test_skills_follow_agent_skills_layout():
 
 def test_launchers_and_installer_are_executable():
     """Launcher and installer scripts carry the executable bit."""
-    for relative in ("bin/_bootstrap", "bin/run-server", "bin/run-http", "scripts/install-rovodev.sh"):
+    for relative in ("bin/sourcery", "scripts/install-rovodev.sh"):
         path = REPO / relative
         assert path.is_file(), relative
         assert path.stat().st_mode & 0o111, f"{relative} is not executable"
@@ -147,14 +148,6 @@ def test_compatibility_docs_cover_all_hosts():
         assert host in text, f"{host} missing from docs/COMPATIBILITY.md"
 
 
-def test_cli_and_prewarm_launchers_are_executable():
-    """The CLI and prewarm shims are present and executable."""
-    for relative in ("bin/sourcery-agent", "bin/prewarm"):
-        path = REPO / relative
-        assert path.is_file(), relative
-        assert path.stat().st_mode & 0o111, f"{relative} is not executable"
-
-
 def test_subagent_has_valid_frontmatter():
     """The triager subagent declares name and description frontmatter."""
     fields = _parse_front_matter((REPO / "agents" / "sourcery-triager.md").read_text())
@@ -169,25 +162,11 @@ def test_hooks_example_is_valid_json():
     assert "SessionStart" in data["hooks"]
 
 
-def test_enabled_hooks_wire_to_prewarm():
-    """The enabled hook invokes bin/prewarm on SessionStart."""
-    data = _load(REPO / "hooks" / "hooks.json")
-    commands = [
-        hook["command"]
-        for entry in data["hooks"]["SessionStart"]
-        for hook in entry["hooks"]
-    ]
-    assert any("bin/prewarm" in command for command in commands)
-
-
 def test_shell_scripts_parse_cleanly():
     """All shipped shell scripts pass ``bash -n``."""
     import subprocess
 
-    scripts = [
-        REPO / "bin" / name
-        for name in ("_bootstrap", "run-server", "run-http", "sourcery-agent", "prewarm")
-    ] + sorted((REPO / "scripts").glob("*.sh"))
+    scripts = sorted((REPO / "bin").iterdir()) + sorted((REPO / "scripts").glob("*.sh"))
     for script in scripts:
         result = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True)
         assert result.returncode == 0, f"{script.name}: {result.stderr}"
@@ -245,11 +224,12 @@ def test_rovodev_installer_preserves_unmanaged_symlinks(tmp_path):
 
 
 def test_version_is_consistent_across_manifests():
-    """pyproject and both plugin manifests declare a single version."""
+    """pyproject, package.json, and both plugin manifests declare one version."""
     import tomllib
 
     versions = {
         tomllib.loads((REPO / "python" / "pyproject.toml").read_text())["project"]["version"],
+        _load(REPO / "package.json")["version"],
         _load(REPO / "plugin.json")["version"],
         _load(REPO / ".claude-plugin" / "plugin.json")["version"],
     }

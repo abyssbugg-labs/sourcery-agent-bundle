@@ -3,9 +3,11 @@
 #   * adds/updates the "sourcery" server in ~/.rovodev/mcp.json (timestamped backup kept)
 #   * links the plugin's skills into ~/.rovodev/skills/
 #
-# Idempotent. Re-run it after moving/renaming this repository (the MCP entry
-# bakes in an absolute path), or to refresh the wiring.
-# Set SOURCERY_API_KEY in the environment Rovo Dev runs in (shell profile).
+# Idempotent. Re-run any time to refresh the wiring (the MCP entry is the
+# published npm package via npx, so it does not depend on this repository's
+# location).
+# Set SOURCERY_API_KEY in the environment Rovo Dev runs in (shell profile); the
+# npx-spawned server inherits it.
 set -euo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -38,7 +40,8 @@ if cfg_path.exists():
 servers = cfg.setdefault("mcpServers", {})
 servers["sourcery"] = {
     "type": "stdio",
-    "command": str(plugin_root / "bin" / "run-server"),
+    "command": "npx",
+    "args": ["-y", "@abyssbugg/sourcery@latest"],
 }
 cfg_path.parent.mkdir(parents=True, exist_ok=True)
 cfg_path.write_text(json.dumps(cfg, indent=2) + "\n")

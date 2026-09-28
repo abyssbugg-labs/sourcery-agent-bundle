@@ -1,6 +1,6 @@
 # Sourcery Agent Bundle
 
-A hybrid plugin bundle for agent-driven Sourcery security workflows: an MCP server (12 tools over Sourcery's public security API, pinned OpenAPI snapshot), two Agent Skills, and adapters for Claude Code, Cursor, Codex/ChatGPT, VS Code, Devin, Grok (CLI + Bot), Amp, Hermes, OpenClaw, and Rovo Dev CLI. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for per-host install steps.
+A hybrid plugin bundle for agent-driven Sourcery security workflows: an MCP server (12 tools over Sourcery's public security API, pinned OpenAPI snapshot), two Agent Skills, and adapters for Claude Code, Cursor, Codex/ChatGPT, VS Code, Devin, Grok (CLI + Bot), Amp, Hermes, OpenClaw, and Rovo Dev CLI. The server ships as the npm package `@abyssbugg/sourcery` — most hosts just register `npx -y @abyssbugg/sourcery@latest`. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for per-host install steps.
 
 ## What is confirmed
 
@@ -41,42 +41,35 @@ Repo root = plugin root. The portable core (`plugin.json` + `skills/` + `mcp.jso
 ```text
 sourcery-agent-bundle/
   plugin.json                      # Agent Plugins core manifest
-  mcp.json                         # portable stdio wiring -> bin/run-server
+  mcp.json                         # portable stdio wiring -> bin/sourcery
   skills/
     sourcery-triage/SKILL.md       # findings triage workflow
     sourcery-remediate/SKILL.md    # minimal-change fix workflow
   bin/
-    run-server                     # stdio launcher (bootstraps venv in PLUGIN_DATA)
-    run-http                       # Streamable HTTP launcher (remote hosts / ChatGPT web)
-    sourcery-agent                 # findings CLI (also on PATH in Claude-style hosts)
-    prewarm                        # venv/deps warm-up (used by the hooks example)
+    sourcery                       # launcher: dist/cli.js when built, else npx @abyssbugg/sourcery
   agents/
     sourcery-triager.md            # read-only triage sub-agent (Claude format)
   .claude-plugin/plugin.json       # Claude Code manifest + userConfig API key
-  .mcp.json                        # Claude Code MCP wiring
-  hooks/hooks.json                 # SessionStart prewarm (Claude format; active)
+  .mcp.json                        # Claude Code MCP wiring (npx)
   .agents/plugins/marketplace.json # Codex/ChatGPT local marketplace entry
   scripts/
     install-rovodev.sh             # Rovo Dev CLI wiring (mcp.json + skills)
     install-local-hosts.sh         # grok, amp, hermes, openclaw, VS Code, Devin
   examples/
     mcp.http.json                  # remote deployment template
-    hooks/                         # optional hooks example (SessionStart prewarm; not enabled)
+    hooks/                         # optional hooks example (SessionStart echo; not enabled)
   docs/
     COMPATIBILITY.md               # per-host setup matrix
     grok-bot-skill.md              # paste-in skill for Grok Bot
   openapi/
     sourcery-openapi.json          # pinned spec snapshot (SHA-256 above)
-  src/sourcery_agent/
-    constants.py                   # pinned facts: operations, enums, spec hash
-    server.py                      # MCP tools
-    http_server.py                 # Streamable HTTP entry point
-    sourcery_client.py             # gated REST client, typed per operation
-    prompts.py                     # agent handoff prompt builder
-  tests/
-    test_sourcery_bundle.py
-    test_plugin_packaging.py
-  pyproject.toml
+  src/                             # TypeScript: MCP server + findings CLI (@abyssbugg/sourcery)
+    constants.ts                   # pinned facts: operations, enums, spec hash
+  tests/                           # TypeScript tests (constants drift pin, tools, client)
+  python/                          # Python reference implementation (server, client, prompts)
+    src/sourcery_agent/
+    tests/
+  package.json                     # npm package manifest (@abyssbugg/sourcery)
   .env.example
   README.md
 ```
@@ -96,24 +89,22 @@ sourcery-agent-bundle/
 ## CLI
 
 ```bash
-sourcery-agent snapshot                          # counts + first page of active findings
-sourcery-agent list --status ACTIVE --limit 50   # filterable list
-sourcery-agent get 1234                          # one finding in full
-sourcery-agent fix-prompt 1234                   # minimal-change agent prompt
+npx -y @abyssbugg/sourcery@latest snapshot                          # counts + first page of active findings
+npx -y @abyssbugg/sourcery@latest list --status ACTIVE --limit 50   # filterable list
+npx -y @abyssbugg/sourcery@latest get 1234                          # one finding in full
+npx -y @abyssbugg/sourcery@latest fix-prompt 1234                   # minimal-change agent prompt
 ```
 
-Runs standalone (console script after `pip install`) or from any plugin host via `bin/sourcery-agent`; on Claude-style hosts `bin/` is on PATH while the plugin is enabled. Add `--json` to any query command for scripting.
+Inside an enabled plugin host, `bin/sourcery` runs the same CLI (it prefers a locally built `dist/cli.js` and otherwise falls back to npx). Add `--json` to any query command for scripting.
 
 ## Setup
 
-Requirements: Python 3.10+.
+Requirements: Node 20+. Most hosts register the MCP server directly:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
 export SOURCERY_API_KEY='...'
-python -m sourcery_agent.server
+npx -y @abyssbugg/sourcery@latest        # stdio MCP server (no args)
+npx -y @abyssbugg/sourcery@latest http   # Streamable HTTP (127.0.0.1:8765/mcp)
 ```
 
 Or install it as a plugin bundle — one step per host (details in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)):
@@ -123,20 +114,13 @@ Or install it as a plugin bundle — one step per host (details in [`docs/COMPAT
 | Claude Code | `claude --plugin-dir .` — prompts for the API key on enable |
 | Cursor | symlink the repo into `~/.cursor/plugins/local/`, reload |
 | Codex CLI / ChatGPT desktop | `codex plugin marketplace add ./` |
-| ChatGPT web | run `bin/run-http` behind HTTPS, add via developer mode |
+| ChatGPT web | run `npx -y @abyssbugg/sourcery@latest http` behind HTTPS, add via developer mode |
 | VS Code / Grok / Amp / Hermes / OpenClaw | `scripts/install-local-hosts.sh` (idempotent; registers plugin, MCP, and skills) |
 | Devin | skill links via the installer; `devin plugins install --local .` for the full plugin |
 | Grok Bot | paste-in skill from `docs/grok-bot-skill.md` |
 | Rovo Dev CLI | `scripts/install-rovodev.sh` |
 
-For development and tests:
-
-```bash
-pip install -e ".[dev]"
-pytest
-```
-
-The bundle uses the official MCP Python SDK (`mcp[cli]>=2.0`, currently 2.2.0), whose `mcp.server.mcpserver.MCPServer` (the class formerly named FastMCP) serves stdio and Streamable HTTP transports.
+For development and tests, see the [Python reference implementation](python/) (its suite doubles as the bundle-packaging checker) and run `npm test` for the TypeScript suite. The server is built on the official MCP TypeScript SDK (`@modelcontextprotocol/sdk`).
 
 ## Regenerating the pinned snapshot
 
@@ -144,8 +128,8 @@ When Sourcery publishes a spec change:
 
 ```bash
 curl -sS --fail -o openapi/sourcery-openapi.json https://api.sourcery.ai/api/openapi.json
-shasum -a 256 openapi/sourcery-openapi.json   # update constants.SPEC_SHA256 + README/docs
-pytest                                        # allow-list tests fail on drift
+shasum -a 256 openapi/sourcery-openapi.json   # update SPEC_SHA256 in src/constants.ts (+ python/src/sourcery_agent/constants.py, README/docs)
+npm test                                      # tests/constants.spec.ts fails on drift
 ```
 
 Sourcery's PR review commands (review, summary, guide, title, resolve, dismiss, create issue) remain GitHub/GitLab comment or label commands — implement those through your Git provider connector, not the Sourcery REST API.
