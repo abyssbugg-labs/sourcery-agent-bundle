@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.abyssbugg/sourcery",
-  "description": "Sourcery security findings for AI coding agents: MCP server, findings CLI, and remediation prompt builder over the public Sourcery security API.",
+  "description": "Sourcery security findings: MCP server, CLI, and fix-prompt builder over the Sourcery API.",
   "repository": {
     "url": "https://github.com/abyssbugg/sourcery-agent-bundle",
     "source": "github"
