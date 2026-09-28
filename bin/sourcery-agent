@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-# Run the sourcery-agent findings CLI inside the plugin environment (shares the
-# venv bootstrap with the MCP server). On Claude-style hosts, bin/ is on PATH
-# while the plugin is enabled, so this is invokable as a bare `sourcery-agent`.
-set -euo pipefail
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_bootstrap"
-exec "$VENV_PY" -m sourcery_agent.cli "$@"

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Sourcery launcher: runs the bundled TypeScript CLI/MCP server when dist/ is
+# present, otherwise falls back to the published npm package. Used as the
+# plugin-relative stdio command in mcp.json (Agent Plugins 1.0.0 requires a
+# single executable token).
+set -euo pipefail
+dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$dir/../dist/cli.js" ]; then exec node "$dir/../dist/cli.js" "$@"; else exec npx -y @abyssbugg/sourcery@latest "$@"; fi

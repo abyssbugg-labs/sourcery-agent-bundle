@@ -4,6 +4,9 @@
   "description": "Sourcery security findings for AI coding agents: MCP server, findings CLI, and remediation prompt builder over the public Sourcery security API.",
   "private": true,
   "type": "module",
+  "bin": {
+    "sourcery": "dist/cli.js"
+  },
   "engines": {
     "node": ">=20"
   },

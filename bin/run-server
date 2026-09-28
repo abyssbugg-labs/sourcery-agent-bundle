@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-# Launch the Sourcery MCP server over stdio.
-#
-# Works with any stdio MCP host: Claude Code plugins (.mcp.json), Agent Plugins
-# clients (mcp.json: Cursor, Codex, ChatGPT desktop), Rovo Dev, or a manually
-# configured mcpServers entry.
-set -euo pipefail
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_bootstrap"
-exec "$VENV_PY" -m sourcery_agent.server "$@"
