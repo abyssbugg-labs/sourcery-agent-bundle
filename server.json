@@ -3,7 +3,7 @@
   "name": "io.github.abyssbugg/sourcery",
   "description": "Sourcery security findings: MCP server, CLI, and fix-prompt builder over the Sourcery API.",
   "repository": {
-    "url": "https://github.com/abyssbugg/sourcery-agent-bundle",
+    "url": "https://github.com/abyssbugg-labs/sourcery-agent-bundle",
     "source": "github"
   },
   "version": "0.2.1",
