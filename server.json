@@ -1,0 +1,29 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.abyssbugg/sourcery",
+  "description": "Sourcery security findings for AI coding agents: MCP server, findings CLI, and remediation prompt builder over the public Sourcery security API.",
+  "repository": {
+    "url": "https://github.com/abyssbugg/sourcery-agent-bundle",
+    "source": "github"
+  },
+  "version": "0.2.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@abyssbugg/sourcery",
+      "version": "0.2.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "description": "Sourcery Team-plan API key with security scanning enabled",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true,
+          "name": "SOURCERY_API_KEY"
+        }
+      ]
+    }
+  ]
+}
