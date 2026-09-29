@@ -1,6 +1,6 @@
 {
   "name": "@abyssbugg/sourcery",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Sourcery security findings for AI coding agents: MCP server, findings CLI, and remediation prompt builder over the public Sourcery security API.",
   "private": true,
   "license": "MIT",

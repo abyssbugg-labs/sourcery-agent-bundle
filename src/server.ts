@@ -37,7 +37,7 @@ export interface SourceryServerOptions {
 /** Server name reported in the MCP `initialize` handshake. */
 const SERVER_NAME = "Sourcery Agent Bundle";
 /** Server version reported in the MCP `initialize` handshake. */
-export const SERVER_VERSION = "0.2.0";
+export const SERVER_VERSION = "0.2.2";
 
 /**
  * Constant-time comparison of two strings as UTF-8 bytes; returns false for

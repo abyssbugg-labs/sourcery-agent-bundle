@@ -59,7 +59,16 @@ jobs:
       - name: Remove private flag for publish
         run: npm pkg delete private
 
-      - name: Publish to npm
+      # npm mints provenance only for public repositories; keep publishing
+      # working while the repository is private.
+      - name: Publish to npm (with provenance)
+        if: github.event.repository.private == false
         run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to npm (private repository, provenance unavailable)
+        if: github.event.repository.private == true
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
