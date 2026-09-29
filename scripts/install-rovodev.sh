@@ -23,6 +23,14 @@ import time
 plugin_root = pathlib.Path(sys.argv[1]).resolve()
 home = pathlib.Path.home()
 
+
+def safely_resolve(path):
+    """Resolve without crashing on broken or circular symlinks."""
+    try:
+        return path.resolve(strict=False)
+    except (OSError, RuntimeError):
+        return None
+
 # --- MCP server entry -------------------------------------------------------
 cfg_path = home / ".rovodev" / "mcp.json"
 cfg = {}
@@ -63,7 +71,8 @@ for skill in sorted((plugin_root / "skills").iterdir()):
     target = skills_dst / skill.name
     if target.is_symlink():
         current = pathlib.Path(os.readlink(target))
-        if current.resolve() == skill.resolve():
+        current_resolved = safely_resolve(current)
+        if current_resolved is not None and current_resolved == skill.resolve():
             managed.add(target.name)
             print(f"skill {target.name}: up to date")
             continue

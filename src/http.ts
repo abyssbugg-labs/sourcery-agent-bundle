@@ -135,6 +135,79 @@ export function checkBindAllowed(
   }
 }
 
+/** Normalize an endpoint path to a single leading slash, no trailing slash. */
+export function normalizeHttpPath(path: string): string {
+  return `/${path.trim().replace(/^\/+|\/+$/g, "")}`;
+}
+
+/**
+ * Return the actual MCP resource URL or reject unsafe remote metadata.
+ *
+ * Port of `resolve_resource_url`: the port must be 1..65535; an explicit
+ * `SOURCERY_MCP_RESOURCE_URL` must be an absolute HTTP(S) URL (HTTPS-only for
+ * remote binds) with no user info, no query or fragment, a valid port, and a
+ * path matching the MCP endpoint; remote binds without one are refused.
+ * Loopback binds default to `http://[host]:port/path`.
+ */
+export function resolveResourceUrl(
+  host: string,
+  port: number,
+  path: string,
+  configured: string | undefined,
+): string {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`SOURCERY_MCP_PORT must be between 1 and 65535; got ${port}`);
+  }
+  const normalizedPath = normalizeHttpPath(path);
+  if (configured) {
+    let parsed: URL;
+    try {
+      parsed = new URL(configured);
+    } catch {
+      throw new Error("SOURCERY_MCP_RESOURCE_URL must be an absolute URL");
+    }
+    const parsedPort = Number(parsed.port);
+    if (
+      parsed.port !== "" &&
+      (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535)
+    ) {
+      throw new Error("SOURCERY_MCP_RESOURCE_URL contains an invalid port");
+    }
+    const allowedSchemes = isLoopbackHost(host)
+      ? new Set(["http:", "https:"])
+      : new Set(["https:"]);
+    if (
+      !allowedSchemes.has(parsed.protocol) ||
+      !parsed.hostname ||
+      parsed.username !== "" ||
+      parsed.password !== ""
+    ) {
+      const expected = isLoopbackHost(host) ? "HTTP(S)" : "HTTPS";
+      throw new Error(
+        `SOURCERY_MCP_RESOURCE_URL must be an absolute ${expected} URL without user information`,
+      );
+    }
+    if (parsed.search || parsed.hash) {
+      throw new Error("SOURCERY_MCP_RESOURCE_URL must not contain a query or fragment");
+    }
+    if (parsed.pathname.replace(/\/+$/, "") !== normalizedPath.replace(/\/+$/, "")) {
+      throw new Error(
+        `SOURCERY_MCP_RESOURCE_URL path must be ${JSON.stringify(normalizedPath)}; ` +
+          `got ${JSON.stringify(parsed.pathname)}`,
+      );
+    }
+    return configured;
+  }
+  if (!isLoopbackHost(host)) {
+    throw new Error(
+      `Remote bind ${host}:${port} requires explicit SOURCERY_MCP_RESOURCE_URL ` +
+        `(e.g., https://mcp.example.com${normalizedPath})`,
+    );
+  }
+  const urlHost = host.includes(":") ? `[${host}]` : host;
+  return `http://${urlHost}:${port}${normalizedPath}`;
+}
+
 /**
  * Static-token bearer check for the MCP endpoint.
  *
@@ -177,42 +250,57 @@ function loopbackAllowedHosts(host: string, port: number): string[] {
  * configured).
  *
  * Reads `SOURCERY_MCP_HOST` (default `127.0.0.1`), `SOURCERY_MCP_PORT`
- * (default 8765), `SOURCERY_MCP_PATH` (default `/mcp`) and
- * `SOURCERY_MCP_AUTH_TOKEN` from the environment, applies the bind guard
- * first, then binds. A single stateful transport instance serves all
- * sessions, matching the Python single-server model; DNS-rebinding
- * protection is enabled (Host allow-list for loopback binds — for remote
- * binds the Host header is client-controlled and bearer authentication is
- * the guard instead). Resolves with a handle once the socket is listening;
- * the caller keeps the process alive until `handle.close()`.
+ * (default 8765), `SOURCERY_MCP_PATH` (default `/mcp`),
+ * `SOURCERY_MCP_AUTH_TOKEN`, `SOURCERY_MCP_RESOURCE_URL` and
+ * `SOURCERY_MCP_ISSUER_URL` from the environment, applies the bind guard and
+ * resource-URL resolution first, then binds. A single stateful transport
+ * instance serves all sessions, matching the Python single-server model;
+ * DNS-rebinding protection is enabled (Host allow-list for loopback binds —
+ * for remote binds the Host header is client-controlled and bearer
+ * authentication is the guard instead). With a token configured, the RFC 9728
+ * protected-resource metadata document is served at
+ * `/.well-known/oauth-protected-resource` and advertised in 401 responses.
+ * Resolves with a handle once the socket is listening; the caller keeps the
+ * process alive until `handle.close()`.
  */
 export async function runHttp(options: HttpServerOptions = {}): Promise<HttpServerHandle> {
   const env = options.env ?? process.env;
   const host = options.host ?? env["SOURCERY_MCP_HOST"] ?? "127.0.0.1";
-  const port = options.port ?? Number(env["SOURCERY_MCP_PORT"] ?? String(DEFAULT_PORT));
-  const path = options.path ?? env["SOURCERY_MCP_PATH"] ?? DEFAULT_PATH;
+  const rawPort = options.port ?? Number(env["SOURCERY_MCP_PORT"] ?? String(DEFAULT_PORT));
+  const path = normalizeHttpPath(options.path ?? env["SOURCERY_MCP_PATH"] ?? DEFAULT_PATH);
   const token = (env["SOURCERY_MCP_AUTH_TOKEN"] ?? "").trim();
 
   checkBindAllowed(host, env);
+  const resourceUrl = resolveResourceUrl(host, rawPort, path, env["SOURCERY_MCP_RESOURCE_URL"]);
+  const issuerUrl = (env["SOURCERY_MCP_ISSUER_URL"] ?? "").trim() || resourceUrl;
+  const metadataUrl = new URL("/.well-known/oauth-protected-resource", resourceUrl).toString();
+  const resourceMetadata = token
+    ? {
+        resource: resourceUrl,
+        authorization_servers: [issuerUrl],
+        scopes_supported: ["sourcery"],
+        bearer_methods_supported: ["header"],
+      }
+    : null;
 
   const server = createSourceryServer(options);
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
     enableDnsRebindingProtection: true,
     ...(isLoopbackHost(host)
-      ? { allowedHosts: loopbackAllowedHosts(host, port) }
+      ? { allowedHosts: loopbackAllowedHosts(host, rawPort) }
       : {}),
   });
   await server.connect(transport);
 
-  const endpoint = new URL(path, `http://${host}:${port}`);
+  const endpoint = new URL(path, `http://${host}:${rawPort}`);
   const httpServer = createServer((req, res) => {
-    void handleRequest(req, res, transport, path, token);
+    void handleRequest(req, res, transport, path, token, resourceMetadata, metadataUrl);
   });
 
   await new Promise<void>((resolve, reject) => {
     httpServer.once("error", reject);
-    httpServer.listen(port, host, () => {
+    httpServer.listen(rawPort, host, () => {
       httpServer.removeListener("error", reject);
       resolve();
     });
@@ -242,9 +330,16 @@ async function handleRequest(
   transport: StreamableHTTPServerTransport,
   path: string,
   token: string,
+  resourceMetadata: Record<string, unknown> | null,
+  metadataUrl: string | null,
 ): Promise<void> {
   try {
     const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
+    if (token && requestPath === "/.well-known/oauth-protected-resource") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(resourceMetadata));
+      return;
+    }
     if (requestPath !== path) {
       res.writeHead(404, { "content-type": "application/json" });
       res.end(jsonErrorBody(-32001, `Not Found: ${requestPath}`));
@@ -253,7 +348,9 @@ async function handleRequest(
     if (token && !bearerTokenAuthorized(req.headers.authorization, token)) {
       res.writeHead(401, {
         "content-type": "application/json",
-        "www-authenticate": "Bearer",
+        ...(metadataUrl
+          ? { "www-authenticate": `Bearer resource_metadata="${metadataUrl}"` }
+          : { "www-authenticate": "Bearer" }),
       });
       res.end(jsonErrorBody(-32001, "Unauthorized: missing or invalid bearer token"));
       return;

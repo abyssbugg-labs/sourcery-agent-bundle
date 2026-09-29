@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-import { ValidationError } from "../src/client.js";
+import { SourceryClient, ValidationError } from "../src/client.js";
 import { API_BASE, SPEC_INFO, SPEC_SHA256 } from "../src/constants.js";
 import { createSourceryServer } from "../src/server.js";
 import { checkLimit, getTool, TOOLS } from "../src/tools.js";
@@ -284,5 +284,94 @@ describe("server over InMemoryTransport", () => {
       expect(text).toContain("src/app.py:10-12");
       expect(text).toContain("untrusted");
     });
+  });
+});
+
+describe("round-6 raw bridge validation (ported from fix/security-hardening-and-ci)", () => {
+  const bridge = getTool("sourcery_api_request");
+  const rejectingCtx: ToolContext = {
+    getClient() {
+      throw new Error("invalid bridge payload reached the client");
+    },
+  };
+
+  it.each([
+    ["DELETE", "/api/v1/security-issues", "{}", "null"],
+    ["GET", "/api/v1/not-a-path", "{}", "null"],
+    ["GET", "/api/v1/security-issues", '{"bogus": 1}', "null"],
+    ["GET", "/api/v1/security-issues", '{"repository_ids": [0]}', "null"],
+    ["GET", "/api/v1/security-issues", '{"repository_ids": "1"}', "null"],
+    ["GET", "/api/v1/security-issues", '{"statuses": ["NOPE"]}', "null"],
+    ["GET", "/api/v1/security-issues", '{"issue_types": ["NOPE"]}', "null"],
+    ["GET", "/api/v1/security-issues", '{"limit": 101}', "null"],
+    ["GET", "/api/v1/security-issues", '{"limit": 1.5}', "null"],
+    ["GET", "/api/v1/security-issues", '{"search": 5}', "null"],
+    ["GET", "/api/v1/security-issues/stats", '{"cursor": "x"}', "null"],
+    ["GET", "/api/v1/security-issues/1", '{"limit": 5}', "null"],
+    ["GET", "/api/v1/security-issues", "{}", '{"ids": [1]}'],
+    ["PATCH", "/api/v1/security-issues", '{"cursor": "x"}', '{"ids": [1], "status": "ACTIVE"}'],
+    ["PATCH", "/api/v1/security-issues", "{}", '{"ids": [1]}'],
+    ["PATCH", "/api/v1/security-issues", "{}", '{"ids": [1], "status": "SOLVED"}'],
+    ["PATCH", "/api/v1/security-issues", "{}", '{"ids": [1], "snoozed_until": "2030-01-01T00:00:00Z"}'],
+    ["PATCH", "/api/v1/security-issues", "{}", '{"ids": [1], "status": "ACTIVE", "severity_override": 5}'],
+    ["PATCH", "/api/v1/security-issues/1", "{}", '{"ids": [1], "status": "ACTIVE"}'],
+    ["PATCH", "/api/v1/security-issues", "{}", '"not-an-object"'],
+  ])(
+    "rejects %s %s before the client (%s, %s)",
+    (method, path, paramsJson, bodyJson) => {
+      // Validation throws synchronously, before any promise (or client) exists.
+      expect(() =>
+        bridge!.run({ method, path, params_json: paramsJson, body_json: bodyJson }, rejectingCtx),
+      ).toThrow();
+    },
+  );
+
+  it("rejects more than one hundred ids before the client (test_raw_bridge_rejects_more_than_one_hundred_ids_before_client)", () => {
+    const body = JSON.stringify({ ids: Array.from({ length: 101 }, (_, i) => i + 1), status: "ACTIVE" });
+    expect(() =>
+      bridge!.run(
+        { method: "PATCH", path: "/api/v1/security-issues", params_json: "{}", body_json: body },
+        rejectingCtx,
+      ),
+    ).toThrow(/at most 100 entries/);
+  });
+
+  it("preserves and forwards all eight verified operations (test_raw_bridge_preserves_all_verified_operations)", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const recording = new SourceryClient({
+      apiKey: "test-key",
+      fetchImpl: (url, init) => {
+        calls.push({ url: String(url), init: init ?? {} });
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+      },
+    });
+    const ctx: ToolContext = { getClient: () => recording };
+    const operations: ReadonlyArray<readonly [string, string, string, string]> = [
+      ["GET", "/api/v1/security-issues", '{"limit": 5}', "null"],
+      ["GET", "/api/v1/security-issues/stats", "{}", "null"],
+      ["GET", "/api/v1/security-issues/1", "{}", "null"],
+      ["PATCH", "/api/v1/security-issues", "{}", '{"ids": [1], "status": "ACTIVE"}'],
+      ["GET", "/api/v1/security-issue-groups", '{"limit": 5}', "null"],
+      ["GET", "/api/v1/security-issue-groups/stats", "{}", "null"],
+      ["GET", "/api/v1/security-issue-groups/1", "{}", "null"],
+      ["PATCH", "/api/v1/security-issue-groups", "{}", '{"ids": [1], "status": "ACTIVE"}'],
+    ];
+    for (const [method, path, paramsJson, bodyJson] of operations) {
+      await bridge!.run({ method, path, params_json: paramsJson, body_json: bodyJson }, ctx);
+    }
+    expect(calls).toHaveLength(8);
+    expect(calls.map((call) => call.init.method)).toEqual([
+      "GET",
+      "GET",
+      "GET",
+      "PATCH",
+      "GET",
+      "GET",
+      "GET",
+      "PATCH",
+    ]);
+    expect(calls[0]!.url).toBe("https://api.sourcery.ai/api/v1/security-issues?limit=5");
+    expect(calls[2]!.url).toBe("https://api.sourcery.ai/api/v1/security-issues/1");
+    expect(JSON.parse(String(calls[3]!.init.body))).toEqual({ ids: [1], status: "ACTIVE" });
   });
 });

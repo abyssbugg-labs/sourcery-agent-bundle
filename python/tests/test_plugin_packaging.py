@@ -282,3 +282,25 @@ def test_rovodev_installer_never_overwrites_an_existing_backup(tmp_path):
     assert result.returncode == 0, result.stderr
     assert existing.read_text() == "precious\n"
     assert (rovodev / f"mcp.json.bak-{stamp}-2").is_file()
+
+
+def test_rovodev_installer_preserves_circular_relative_symlink(tmp_path):
+    """A circular unmanaged skill link is left untouched instead of crashing."""
+    import os
+    import subprocess
+
+    home = tmp_path / "home"
+    skills_dir = home / ".rovodev" / "skills"
+    skills_dir.mkdir(parents=True)
+    link = skills_dir / "sourcery-triage"
+    link.symlink_to("sourcery-triage", target_is_directory=True)
+
+    result = subprocess.run(
+        ["bash", str(REPO / "scripts" / "install-rovodev.sh")],
+        env={**os.environ, "HOME": str(home)},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert link.is_symlink()
+    assert os.readlink(link) == "sourcery-triage"

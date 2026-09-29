@@ -1,8 +1,8 @@
 /**
  * Tests for the Streamable HTTP entry point (ports of the three http_server
  * tests in `python/tests/test_sourcery_bundle.py`, plus the bearer-token
- * helper). No real sockets are bound — runHttp is only exercised up to the
- * bind guard, which throws before any listener is created.
+ * helper and the round-6 resource-URL / metadata hardening). One integration
+ * test binds a real loopback socket to verify the RFC 9728 metadata route.
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -11,8 +11,10 @@ import {
   bearerTokenAuthorized,
   checkBindAllowed,
   isLoopbackHost,
+  resolveResourceUrl,
   runHttp,
 } from "../src/http.js";
+import { tokensMatch } from "../src/server.js";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -124,5 +126,117 @@ describe("runHttp bind-guard ordering", () => {
     await expect(
       runHttp({ env: { SOURCERY_MCP_HOST: "192.168.1.20" } }),
     ).rejects.toThrow(/SOURCERY_MCP_HOST='192\.168\.1\.20'/);
+  });
+});
+
+describe("resolveResourceUrl (round-6 port of test_remote_resource_url_is_explicit_https_and_matches_mcp_path)", () => {
+  it("requires an explicit HTTPS resource URL matching the MCP path for remote binds", () => {
+    expect(() => resolveResourceUrl("0.0.0.0", 8765, "/mcp", undefined)).toThrow(
+      /requires explicit SOURCERY_MCP_RESOURCE_URL/,
+    );
+    expect(() => resolveResourceUrl("0.0.0.0", 8765, "/mcp", "http://mcp.example.com/mcp")).toThrow(
+      /must be an absolute HTTPS URL/,
+    );
+    expect(() => resolveResourceUrl("0.0.0.0", 8765, "/mcp", "https://mcp.example.com/wrong")).toThrow(
+      /path must be "\/mcp"/,
+    );
+    expect(
+      resolveResourceUrl("0.0.0.0", 8765, "/mcp", "https://mcp.example.com/mcp"),
+    ).toBe("https://mcp.example.com/mcp");
+  });
+
+  it("rejects malformed URLs and user information", () => {
+    for (const bad of [
+      "https://user@mcp.example.com/mcp",
+      "https://mcp.example.com:invalid/mcp",
+      "https://@/mcp",
+      "https://[::1/mcp",
+      "https://mcp.example.com/mcp?query=1",
+      "https://mcp.example.com/mcp#frag",
+    ]) {
+      expect(() => resolveResourceUrl("0.0.0.0", 8765, "/mcp", bad)).toThrow();
+    }
+  });
+
+  it("allows plain HTTP only for loopback binds (port of test_local_resource_url_defaults_to_bound_loopback_endpoint)", () => {
+    expect(resolveResourceUrl("127.0.0.1", 9876, "/custom", undefined)).toBe(
+      "http://127.0.0.1:9876/custom",
+    );
+    expect(resolveResourceUrl("::1", 9876, "/mcp", "http://[::1]:9876/mcp")).toBe(
+      "http://[::1]:9876/mcp",
+    );
+    expect(() => resolveResourceUrl("127.0.0.1", 9876, "/mcp", "http://example.com/mcp")).not.toThrow();
+  });
+
+  it("bounds the bind port (round-7)", () => {
+    expect(() => resolveResourceUrl("127.0.0.1", 0, "/mcp", undefined)).toThrow(
+      /SOURCERY_MCP_PORT must be between 1 and 65535/,
+    );
+    expect(() => resolveResourceUrl("127.0.0.1", 70000, "/mcp", undefined)).toThrow(
+      /SOURCERY_MCP_PORT must be between 1 and 65535/,
+    );
+    expect(() => resolveResourceUrl("127.0.0.1", 1.5, "/mcp", undefined)).toThrow(
+      /SOURCERY_MCP_PORT must be between 1 and 65535/,
+    );
+  });
+});
+
+describe("tokensMatch (round-6 constant-time compare, port of test_static_token_verifier_handles_unicode_tokens)", () => {
+  it("accepts identical tokens, including unicode, and rejects everything else", () => {
+    expect(tokensMatch("s3cret", "s3cret")).toBe(true);
+    expect(tokensMatch("tökén✓", "tökén✓")).toBe(true);
+    expect(tokensMatch("tökén", "token")).toBe(false);
+    expect(tokensMatch("s3cret", "s3cret2")).toBe(false);
+    expect(tokensMatch("short", "a-much-longer-token")).toBe(false);
+    expect(tokensMatch("", "")).toBe(true);
+  });
+});
+
+describe("runHttp resource metadata (round-6 port of test_build_server_auth_is_observable)", () => {
+  it("serves RFC 9728 metadata and advertises it on 401", async () => {
+    const handle = await runHttp({
+      env: { SOURCERY_MCP_AUTH_TOKEN: "s3cret", SOURCERY_API_KEY: "test-key" },
+      host: "127.0.0.1",
+      port: 18123,
+      path: "/mcp",
+    });
+    try {
+      const metadata = await fetch("http://127.0.0.1:18123/.well-known/oauth-protected-resource");
+      expect(metadata.status).toBe(200);
+      const body = (await metadata.json()) as {
+        resource: string;
+        authorization_servers: string[];
+        scopes_supported: string[];
+      };
+      expect(body.resource).toBe("http://127.0.0.1:18123/mcp");
+      expect(body.authorization_servers).toEqual(["http://127.0.0.1:18123/mcp"]);
+      expect(body.scopes_supported).toEqual(["sourcery"]);
+
+      const unauthorized = await fetch("http://127.0.0.1:18123/mcp");
+      expect(unauthorized.status).toBe(401);
+      expect(unauthorized.headers.get("www-authenticate")).toContain("resource_metadata=");
+
+      const authorized = await fetch("http://127.0.0.1:18123/mcp", {
+        headers: {
+          authorization: "Bearer s3cret",
+          accept: "application/json, text/event-stream",
+          "content-type": "application/json",
+        },
+        method: "POST",
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-06-18",
+            capabilities: {},
+            clientInfo: { name: "http-spec", version: "0.0.0" },
+          },
+        }),
+      });
+      expect(authorized.status).toBe(200);
+    } finally {
+      await handle.close();
+    }
   });
 });

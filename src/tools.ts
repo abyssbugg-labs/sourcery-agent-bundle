@@ -347,6 +347,147 @@ function checkedRequestParams(params: Record<string, unknown>): RequestParams {
   return checked;
 }
 
+/** Collection endpoints (list + bulk-PATCH) in the pinned surface. */
+const COLLECTION_PATHS: ReadonlySet<string> = new Set([
+  "/api/v1/security-issues",
+  "/api/v1/security-issue-groups",
+]);
+/** Aggregate-count endpoints in the pinned surface. */
+const STATS_PATHS: ReadonlySet<string> = new Set([
+  "/api/v1/security-issues/stats",
+  "/api/v1/security-issue-groups/stats",
+]);
+/** Single-item detail endpoints in the pinned surface (positive integer id). */
+const ITEM_PATH = /^\/api\/v1\/security-(?:issues|issue-groups)\/[1-9][0-9]*$/;
+
+/** Validate a JSON array of positive integer identifiers. */
+export function positiveIntegerList(
+  value: unknown,
+  field: string,
+  maxItems?: number,
+): readonly number[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${field} must be an array`);
+  }
+  if (value.length === 0) {
+    throw new Error(`${field} must not be empty`);
+  }
+  if (maxItems !== undefined && value.length > maxItems) {
+    throw new Error(`${field} must contain at most ${maxItems} entries`);
+  }
+  if (value.some((item) => typeof item !== "number" || !Number.isInteger(item) || item <= 0)) {
+    throw new Error(`${field} must contain only positive integers`);
+  }
+  return value as readonly number[];
+}
+
+/** Reject values outside a pinned enum; the message mirrors the client's. */
+function checkSubset(values: unknown, allowed: readonly string[], field: string): void {
+  if (!Array.isArray(values)) {
+    throw new Error(`${field} must be an array`);
+  }
+  for (const value of values) {
+    if (typeof value !== "string" || !allowed.includes(value)) {
+      throw new Error(
+        `${field} must be one of ${JSON.stringify(allowed)}; got ${JSON.stringify(value)}`,
+      );
+    }
+  }
+}
+
+/** Validate query parameters for one verified GET operation. */
+export function validateApiRequestGet(
+  path: string,
+  params: Record<string, unknown>,
+): void {
+  let allowed: ReadonlySet<string>;
+  if (COLLECTION_PATHS.has(path)) {
+    allowed = new Set([
+      "repository_ids",
+      "issue_types",
+      "statuses",
+      "search",
+      "limit",
+      "cursor",
+    ]);
+  } else if (STATS_PATHS.has(path)) {
+    allowed = new Set(["repository_ids", "issue_types"]);
+  } else if (ITEM_PATH.test(path)) {
+    allowed = new Set();
+  } else {
+    throw new Error(`GET path is not a verified Sourcery operation: ${path}`);
+  }
+  const unknown = Object.keys(params).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) {
+    throw new Error(`Unknown parameters for ${path}: ${JSON.stringify(unknown.sort())}`);
+  }
+  if ("repository_ids" in params) {
+    positiveIntegerList(params["repository_ids"], "repository_ids");
+  }
+  if ("issue_types" in params) {
+    checkSubset(params["issue_types"], ISSUE_TYPES, "issue_types");
+  }
+  if ("statuses" in params) {
+    checkSubset(params["statuses"], STATUSES, "statuses");
+  }
+  if ("limit" in params) {
+    if (typeof params["limit"] !== "number" || !Number.isInteger(params["limit"])) {
+      throw new Error("limit must be an integer");
+    }
+    checkLimit(params["limit"]);
+  }
+  for (const field of ["search", "cursor"]) {
+    if (field in params && params[field] !== null && typeof params[field] !== "string") {
+      throw new Error(`${field} must be a string or null`);
+    }
+  }
+}
+
+/** Validate a bulk-update body for one verified PATCH operation. */
+export function validateApiRequestPatch(
+  path: string,
+  body: Record<string, unknown>,
+): void {
+  if (!COLLECTION_PATHS.has(path)) {
+    throw new Error(`PATCH path is not a verified Sourcery operation: ${path}`);
+  }
+  const allowed = new Set(["ids", "status", "snoozed_until", "severity_override", "reason"]);
+  const unknown = Object.keys(body).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) {
+    throw new Error(`Unknown fields in PATCH ${path}: ${JSON.stringify(unknown.sort())}`);
+  }
+  if (!("ids" in body)) {
+    throw new Error(`PATCH ${path} requires 'ids' field`);
+  }
+  positiveIntegerList(body["ids"], "ids", BULK_UPDATE_MAX_IDS);
+  const status = body["status"];
+  if (status !== null && status !== undefined) {
+    if (typeof status !== "string" || !(STATUS_INPUTS as readonly string[]).includes(status)) {
+      throw new Error(
+        `status must be one of ${JSON.stringify(STATUS_INPUTS)}; got ${JSON.stringify(status)}`,
+      );
+    }
+  }
+  const severity = body["severity_override"];
+  if (severity !== null && severity !== undefined) {
+    if (typeof severity !== "string" || !(SEVERITIES as readonly string[]).includes(severity)) {
+      throw new Error(
+        `severity_override must be one of ${JSON.stringify(SEVERITIES)}; got ${JSON.stringify(severity)}`,
+      );
+    }
+  }
+  for (const field of ["snoozed_until", "reason"]) {
+    if (field in body && body[field] !== null && typeof body[field] !== "string") {
+      throw new Error(`${field} must be a string or null`);
+    }
+  }
+  validateBulkUpdate({
+    status: typeof status === "string" ? status : null,
+    snoozed_until: typeof body["snoozed_until"] === "string" ? body["snoozed_until"] : null,
+    severity_override: typeof severity === "string" ? severity : null,
+  });
+}
+
 /** `sourcery_api_request` — compatibility bridge over the eight verified operations. */
 export const sourceryApiRequest = defineTool({
   name: "sourcery_api_request",
@@ -375,8 +516,25 @@ export const sourceryApiRequest = defineTool({
     if (!isPlainObject(params)) {
       throw new Error("params_json must decode to an object");
     }
+    const normalizedMethod = method.toUpperCase();
+    if (normalizedMethod === "GET") {
+      if (body !== undefined) {
+        throw new Error(`GET ${path} does not accept a request body`);
+      }
+      validateApiRequestGet(path, params);
+    } else if (normalizedMethod === "PATCH") {
+      if (Object.keys(params).length > 0) {
+        throw new Error(`PATCH ${path} does not accept query parameters`);
+      }
+      if (!isPlainObject(body)) {
+        throw new Error("PATCH body must decode to an object");
+      }
+      validateApiRequestPatch(path, body);
+    } else {
+      throw new Error("method must be GET or PATCH");
+    }
     return ctx.getClient().request({
-      method,
+      method: normalizedMethod,
       path,
       params: checkedRequestParams(params),
       body,

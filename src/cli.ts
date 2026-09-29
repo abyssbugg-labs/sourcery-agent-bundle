@@ -106,15 +106,26 @@ function truthy(value: unknown): boolean {
   return Boolean(value);
 }
 
+/** True for plain JSON objects (not arrays, not null). */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
- * Copy a finding with untrusted string fields sanitized for terminal display.
+ * Recursively strip terminal controls from all human-readable values:
+ * strings directly, and every nested object/array element in turn.
  */
-function forDisplay(finding: Finding): Finding {
-  const display: Finding = {};
-  for (const [key, value] of Object.entries(finding)) {
-    display[key] = typeof value === "string" ? sanitizeForTerminal(value) : value;
+export function forDisplay<T>(value: T): T {
+  if (typeof value === "string") return sanitizeForTerminal(value) as unknown as T;
+  if (Array.isArray(value)) return value.map((item) => forDisplay(item)) as unknown as T;
+  if (isPlainObject(value)) {
+    const display: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      display[key] = forDisplay(item);
+    }
+    return display as T;
   }
-  return display;
+  return value;
 }
 
 /** Mask a key for display: never the full value. */

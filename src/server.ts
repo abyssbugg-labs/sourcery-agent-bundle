@@ -15,6 +15,8 @@
  * results (`isError: true`) instead of crashing the server.
  */
 
+import { timingSafeEqual } from "node:crypto";
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
@@ -35,7 +37,18 @@ export interface SourceryServerOptions {
 /** Server name reported in the MCP `initialize` handshake. */
 const SERVER_NAME = "Sourcery Agent Bundle";
 /** Server version reported in the MCP `initialize` handshake. */
-const SERVER_VERSION = "0.2.0";
+export const SERVER_VERSION = "0.2.0";
+
+/**
+ * Constant-time comparison of two strings as UTF-8 bytes; returns false for
+ * mismatched lengths without leaking prefix information.
+ */
+export function tokensMatch(candidate: string, expected: string): boolean {
+  const candidateBytes = Buffer.from(candidate, "utf8");
+  const expectedBytes = Buffer.from(expected, "utf8");
+  if (candidateBytes.length !== expectedBytes.length) return false;
+  return timingSafeEqual(candidateBytes, expectedBytes);
+}
 
 /** Pinned instructions describing the triage workflow over this tool surface. */
 const INSTRUCTIONS =

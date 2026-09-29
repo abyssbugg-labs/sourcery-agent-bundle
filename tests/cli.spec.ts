@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   formatFindingRow,
+  forDisplay,
   loadKey,
   parseCliArgs,
   runCli,
@@ -499,5 +500,22 @@ describe("help and usage errors", () => {
     const code = await runCli(["get", "1", "--bogus"], io);
     expect(code).toBe(2);
     expect(err()).toContain("unrecognized arguments: --bogus");
+  });
+});
+
+describe("forDisplay (round-6 recursive sanitization, port of test_for_display_recursively_sanitizes_nested_values)", () => {
+  it("recursively sanitizes nested mappings and sequences", () => {
+    const payload = {
+      details: [{ fixed_versions: ["1.2.3\x1b]0;owned\x07"] }, ["safe\x1b[31m"]],
+      top: "ok\x1b[31m",
+      count: 5,
+      nested: { deeper: { value: "\x07bad" } },
+    };
+    expect(forDisplay(payload)).toEqual({
+      details: [{ fixed_versions: ["1.2.3"] }, ["safe"]],
+      top: "ok",
+      count: 5,
+      nested: { deeper: { value: "bad" } },
+    });
   });
 });
