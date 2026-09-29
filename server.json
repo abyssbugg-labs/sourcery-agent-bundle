@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.abyssbugg/sourcery",
+  "name": "io.github.abyssbugg-labs/sourcery",
   "description": "Sourcery security findings: MCP server, CLI, and fix-prompt builder over the Sourcery API.",
   "repository": {
     "url": "https://github.com/abyssbugg-labs/sourcery-agent-bundle",
     "source": "github"
   },
-  "version": "0.2.2",
+  "version": "0.2.3",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@abyssbugg/sourcery",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "transport": {
         "type": "stdio"
       },

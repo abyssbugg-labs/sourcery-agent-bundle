@@ -43,6 +43,23 @@ jobs:
       - name: Validate server.json
         run: ./mcp-publisher validate
 
+      # The registry validates npm ownership against the package version
+      # referenced in server.json, so wait for the npm publish (triggered by
+      # the same tag) to propagate before publishing here.
+      - name: Wait for the npm release to propagate
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          for attempt in $(seq 1 20); do
+            if npm view "@abyssbugg/sourcery@${VERSION}" version > /dev/null 2>&1; then
+              echo "npm @abyssbugg/sourcery@${VERSION} is available"
+              exit 0
+            fi
+            echo "attempt ${attempt}: npm ${VERSION} not visible yet; waiting 30s"
+            sleep 30
+          done
+          echo "::error::npm @abyssbugg/sourcery@${VERSION} did not appear after 10 minutes"
+          exit 1
+
       - name: Authenticate to MCP Registry (GitHub OIDC)
         run: ./mcp-publisher login github-oidc
 
