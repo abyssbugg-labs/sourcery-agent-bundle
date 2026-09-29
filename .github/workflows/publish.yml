@@ -38,7 +38,8 @@ jobs:
 
       - name: Verify tag points at main
         run: |
-          git fetch origin main --no-tags
+          # fetch-depth: 0 above already fetched origin/main; no credentials
+          # are persisted, so an extra fetch here would fail.
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
             echo "::error::Tag ${GITHUB_REF_NAME} does not point at a commit on main. Refusing to publish."
             exit 1
