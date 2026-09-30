@@ -6,12 +6,12 @@
     "url": "https://github.com/abyssbugg-labs/sourcery-agent-bundle",
     "source": "github"
   },
-  "version": "0.2.3",
+  "version": "0.2.4",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@abyssbugg/sourcery",
-      "version": "0.2.3",
+      "version": "0.2.4",
       "transport": {
         "type": "stdio"
       },

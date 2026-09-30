@@ -23,14 +23,14 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') && github.ref_type == 'tag'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # Full history so the "tag is on main" check below is reliable.
           fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Node 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
