@@ -3,6 +3,6 @@
   "name": "sourcery-agent",
   "version": "0.2.4",
   "description": "Sourcery security findings for AI coding agents: triage and minimal-change remediation via the public Sourcery API (12 MCP tools + skills).",
-  "author": { "name": "datamatics" },
+  "author": { "name": "abyssbugg" },
   "keywords": ["sourcery", "security", "findings", "triage", "mcp"]
 }

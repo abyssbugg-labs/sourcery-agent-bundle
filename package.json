@@ -40,5 +40,6 @@
   "repository": {
     "url": "git+https://github.com/abyssbugg-labs/sourcery-agent-bundle.git",
     "type": "git"
-  }
+  },
+  "author": "abyssbugg"
 }

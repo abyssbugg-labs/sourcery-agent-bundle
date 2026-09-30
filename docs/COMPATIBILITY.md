@@ -152,8 +152,12 @@ others inherit it from the shell that launches them:
 export SOURCERY_API_KEY='YOUR_KEY'
 ```
 
-(The venv-era key file at `~/.local/share/sourcery-agent/sourcery_api_key` is
-no longer read; configure the environment instead.)
+(The CLI also keeps a machine-local fallback: if `SOURCERY_API_KEY` is unset
+it reads a key file at `SOURCERY_API_KEY_FILE`, or
+`$PLUGIN_DATA/sourcery_api_key`, or
+`~/.local/share/sourcery-agent/sourcery_api_key` — a leftover of the venv era
+that still works. The bare `SourceryClient` library reads the environment
+only.)
 
 ## Any other MCP host (generic)
 

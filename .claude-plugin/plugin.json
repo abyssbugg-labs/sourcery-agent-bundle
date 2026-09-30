@@ -3,7 +3,7 @@
   "displayName": "Sourcery Agent",
   "version": "0.2.4",
   "description": "Sourcery security findings triage and remediation: 12 MCP tools over the public Sourcery security API, plus triage/remediate skills.",
-  "author": { "name": "datamatics" },
+  "author": { "name": "abyssbugg" },
   "keywords": ["sourcery", "security", "findings", "triage", "mcp"],
   "userConfig": {
     "sourcery_api_key": {
