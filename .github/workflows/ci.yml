@@ -18,8 +18,7 @@ concurrency:
 jobs:
   build:
     name: Node ${{ matrix.node-version }}
-    # Depot managed runner: billed by Depot, unaffected by GitHub Actions billing.
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:

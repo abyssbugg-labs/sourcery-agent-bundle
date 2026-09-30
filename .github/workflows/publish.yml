@@ -16,8 +16,7 @@ concurrency:
 jobs:
   publish:
     name: Publish to npm
-    # Depot managed runner: billed by Depot, unaffected by GitHub Actions billing.
-    runs-on: depot-ubuntu-24.04
+    runs-on: ubuntu-latest
     # Guard: only v* tags reach this workflow, and the steps below additionally
     # verify the tag points at a commit on main before anything is published.
     if: startsWith(github.ref, 'refs/tags/v') && github.ref_type == 'tag'
