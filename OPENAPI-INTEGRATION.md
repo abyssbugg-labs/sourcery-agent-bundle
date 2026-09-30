@@ -30,7 +30,7 @@ curl -sS --fail -o openapi/sourcery-openapi.json https://api.sourcery.ai/api/ope
 shasum -a 256 openapi/sourcery-openapi.json
 ```
 
-Then update `SPEC_SHA256` / `SPEC_FETCHED` in `src/sourcery_agent/constants.py` plus the hash in `README.md`. Run `pytest` — the allow-list tests fail on any drift between the spec surface and the code.
+Then update `SPEC_SHA256` / `SPEC_FETCHED` in `src/constants.ts` (the Python reference copy lives at `python/src/sourcery_agent/constants.py`). Run `npm test` — the drift test in `tests/constants.spec.ts` fails on any mismatch between the snapshot hash, the spec's info block, and the eight verified operations.
 
 ## Git provider workflow tools (not Sourcery REST)
 
