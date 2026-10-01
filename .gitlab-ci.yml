@@ -1,0 +1,30 @@
+# GitLab CI for the mirror copy (GitHub remains the release platform;
+# .github/workflows/* do not run here). Two jobs, one per runtime.
+#
+# Note: pipelines consume GitLab compute minutes on every push to main or a
+# tag. Disable shared runners in Settings > CI/CD if you want zero usage.
+
+stages:
+  - test
+
+node-tests:
+  stage: test
+  image: node:20
+  script:
+    - npm ci
+    - npm run typecheck
+    - npm test
+    - npm run build
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+python-tests:
+  stage: test
+  image: python:3.12
+  script:
+    - pip install --quiet -e "python[dev]"
+    - pytest python -q
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
